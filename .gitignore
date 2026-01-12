@@ -4,3 +4,4 @@
 *.lib
 "tray/.vs/"
 "tray/out/"
+.venv/
