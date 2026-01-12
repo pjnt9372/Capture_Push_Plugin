@@ -2,4 +2,5 @@
 *.exe
 *.dll
 *.lib
-
+"tray/.vs/"
+"tray/out/"
