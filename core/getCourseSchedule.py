@@ -15,6 +15,7 @@ import time
 import sys
 import configparser
 from pathlib import Path
+import os
 # 使用可执行文件所在目录或脚本所在目录作为基础路径
 if getattr(sys, 'frozen', False):
     # 如果是打包后的exe运行
@@ -25,35 +26,33 @@ else:
 CONFIG_PATH = BASE_DIR / 'config.ini'
 CONFIG_PATH = str(CONFIG_PATH)
 
+# 确定日志文件路径（使用用户 AppData 目录）
+if getattr(sys, 'frozen', False):
+    # 打包后的环境，使用 AppData\Local\GradeTracker
+    appdata_dir = Path(os.environ.get('LOCALAPPDATA', os.environ.get('APPDATA', '.'))) / 'GradeTracker'
+    appdata_dir.mkdir(parents=True, exist_ok=True)
+    log_file_path = appdata_dir / 'getCourseSchedule.log'
+else:
+    # 开发环境，使用当前目录
+    log_file_path = Path('getCourseSchedule.log')
+
 try:
     # 尝试加载 config.ini 中的日志配置
     logging.config.fileConfig(CONFIG_PATH)
     logger = logging.getLogger()
-    logger.info("成功加载 config.ini 中的日志配置")
-except configparser.Error as e:
-    # 如果配置文件格式错误，使用基本配置
+    logger.info(f"成功加载 config.ini 中的日志配置，日志文件: {log_file_path}")
+except (configparser.Error, Exception) as e:
+    # 配置文件有问题，使用自定义配置
     logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(),  # 控制台输出
-            logging.FileHandler('getCourseSchedule.log', encoding='utf-8')  # 文件输出到当前目录
+            logging.FileHandler(str(log_file_path), encoding='utf-8')  # 文件输出到用户目录
         ]
     )
     logger = logging.getLogger(__name__)
-    logger.warning(f"配置文件格式错误，使用默认日志配置: {e}")
-except Exception as e:
-    # 如果配置文件不存在或其他错误，使用基本配置
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(),  # 控制台输出
-            logging.FileHandler('getCourseSchedule.log', encoding='utf-8')  # 文件输出到当前目录
-        ]
-    )
-    logger = logging.getLogger(__name__)
-    logger.warning(f"未能加载 config.ini 日志配置，使用默认配置: {e}")
+    logger.warning(f"未能加载 config.ini 日志配置，使用默认配置到 {log_file_path}: {e}")
 
 # ===== 2. 读取运行模式 =====
 def get_run_mode():

@@ -3,6 +3,7 @@
 
 #include <windows.h>
 #include <shellapi.h>
+#include <shlobj.h>  // 用于 SHGetFolderPath
 #include <iostream>
 #include <string>
 #include <vector>
@@ -85,15 +86,22 @@ void InitializeLog();
 
 // 初始化日志系统
 void InitializeLog() {
-    std::string exe_dir = GetExecutableDirectory();
-    g_log_file_path = exe_dir + "\\tray_app.log";
-    
-    // 确保目录存在
-    std::string log_dir = exe_dir;
-    if (log_dir.back() != '\\' && log_dir.back() != '/') {
-        log_dir += "\\";
+    // 优先使用用户 AppData\Local 目录（有写入权限）
+    char appdata_path[MAX_PATH];
+    if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, appdata_path) == S_OK) {
+        std::string log_dir = std::string(appdata_path) + "\\GradeTracker";
+        
+        // 创建应用目录
+        CreateDirectoryA(log_dir.c_str(), NULL);
+        
+        g_log_file_path = log_dir + "\\tray_app.log";
+        LOG_INFO("使用 AppData 目录: " + log_dir);
+    } else {
+        // 备选方案：使用程序所在目录
+        std::string exe_dir = GetExecutableDirectory();
+        g_log_file_path = exe_dir + "\\tray_app.log";
+        LOG_WARNING("无法获取 AppData 目录，使用程序目录: " + exe_dir);
     }
-    g_log_file_path = log_dir + "tray_app.log";
     
     // 创建或清空日志文件（每次启动时）
     std::ofstream log_file(g_log_file_path, std::ios::trunc);
@@ -103,17 +111,18 @@ void InitializeLog() {
         LOG_INFO("托盘应用程序启动");
         LOG_INFO("日志文件位置: " + g_log_file_path);
     } else {
-        // 如果无法创建日志文件，尝试在当前目录创建
-        g_log_file_path = ".\\tray_app.log";
+        // 如果仍无法创建日志，尝试临时目录
+        char temp_path[MAX_PATH];
+        GetTempPathA(MAX_PATH, temp_path);
+        g_log_file_path = std::string(temp_path) + "tray_app.log";
+        
         std::ofstream fallback_log_file(g_log_file_path, std::ios::trunc);
         if (fallback_log_file.is_open()) {
-            fallback_log_file << "========== Tray App Started (Fallback) ==========\n";
+            fallback_log_file << "========== Tray App Started (Temp) ==========\n";
             fallback_log_file.close();
-            LOG_INFO("托盘应用程序启动");
-            LOG_INFO("日志文件位置(备选): " + g_log_file_path);
+            LOG_WARNING("日志文件位置(临时目录): " + g_log_file_path);
         } else {
-            // 如果仍无法创建日志，至少在控制台输出
-            std::cout << "无法创建日志文件: " << g_log_file_path << std::endl;
+            std::cout << "❌ 无法创建日志文件: " << g_log_file_path << std::endl;
         }
     }
 }
