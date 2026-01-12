@@ -1,10 +1,26 @@
-.\idea\
+# Virtual environment
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# IDE files
+.idea/
+.vscode/
+
+# Logs
+app.log
+*.log
+
+# Build artifacts
+tray/.vs/
+tray/out/
+
+# Executables
 *.exe
 *.dll
 *.lib
-"tray/.vs/"
-"tray/out/"
-.venv/
-__pycache__/
-*.pyc
-*.pyo
