@@ -12,6 +12,7 @@ import time
 
 # ===== 1. 初始化日志 =====
 import sys
+import configparser
 from pathlib import Path
 # 使用可执行文件所在目录或脚本所在目录作为基础路径
 if getattr(sys, 'frozen', False):
@@ -24,12 +25,34 @@ CONFIG_PATH = BASE_DIR / 'config.ini'
 CONFIG_PATH = str(CONFIG_PATH)
 
 try:
+    # 尝试加载 config.ini 中的日志配置
     logging.config.fileConfig(CONFIG_PATH)
     logger = logging.getLogger()
+    logger.info("成功加载 config.ini 中的日志配置")
+except configparser.Error as e:
+    # 如果配置文件格式错误，使用基本配置
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),  # 控制台输出
+            logging.FileHandler('getCourseGrades.log', encoding='utf-8')  # 文件输出到当前目录
+        ]
+    )
+    logger = logging.getLogger(__name__)
+    logger.warning(f"配置文件格式错误，使用默认日志配置: {e}")
 except Exception as e:
-    logging.basicConfig(level=logging.DEBUG)
-    logger = logging.getLogger()
-    logger.warning(f"未能加载 config.ini 日志配置: {e}")
+    # 如果配置文件不存在或其他错误，使用基本配置
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),  # 控制台输出
+            logging.FileHandler('getCourseGrades.log', encoding='utf-8')  # 文件输出到当前目录
+        ]
+    )
+    logger = logging.getLogger(__name__)
+    logger.warning(f"未能加载 config.ini 日志配置，使用默认配置: {e}")
 
 # ===== 2. 读取运行模式 =====
 def get_run_mode():
