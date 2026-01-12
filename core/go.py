@@ -7,7 +7,7 @@ import configparser
 
 from core.getCourseGrades import fetch_grades
 from core.getCourseSchedule import fetch_course_schedule
-from core.mailer import send_grade_mail, send_schedule_mail
+from core.push import send_grade_mail, send_schedule_mail
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")

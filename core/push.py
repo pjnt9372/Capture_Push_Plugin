@@ -1,10 +1,31 @@
 # -*- coding: utf-8 -*-
 import smtplib
 import configparser
+import logging
+import sys
+from pathlib import Path
 from email.mime.text import MIMEText
 from email.header import Header
 from email.mime.multipart import MIMEMultipart
 from abc import ABC, abstractmethod
+
+# ===== 日志初始化 =====
+if getattr(sys, 'frozen', False):
+    BASE_DIR = Path(sys._MEIPASS)
+else:
+    BASE_DIR = Path(__file__).resolve().parent.parent
+CONFIG_PATH = BASE_DIR / 'config.ini'
+
+try:
+    logging.config.fileConfig(str(CONFIG_PATH))
+    logger = logging.getLogger()
+except Exception as e:
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+    logger.warning(f"未能加载 config.ini 日志配置: {e}")
 
 
 def load_mail_cfg():
@@ -20,6 +41,8 @@ def load_mail_cfg():
         # 如果是正常脚本运行
         base_dir = Path(__file__).resolve().parent.parent
     config_path = base_dir / "config.ini"
+    
+    logger.info(f"加载配置文件: {config_path}")
     cfg.read(str(config_path), encoding="utf-8")
     return cfg
 
@@ -36,12 +59,15 @@ class EmailSender(NotificationSender):
     """邮件推送实现"""
     
     def send(self, subject, html):
+        logger.info(f"开始发送邮件: {subject}")
         cfg = load_mail_cfg()
         smtp = cfg.get("email", "smtp")
         port = cfg.getint("email", "port")
         sender = cfg.get("email", "sender")
         receiver = cfg.get("email", "receiver")
         auth = cfg.get("email", "auth")
+        
+        logger.debug(f"SMTP服务器: {smtp}:{port}, 发件人: {sender}, 收件人: {receiver}")
 
         msg = MIMEMultipart()
         msg["From"] = sender
@@ -51,13 +77,18 @@ class EmailSender(NotificationSender):
         msg.attach(MIMEText(html, "html", "utf-8"))
 
         try:
+            logger.debug(f"连接到 SMTP 服务器: {smtp}:{port}")
             server = smtplib.SMTP_SSL(smtp, port)
+            logger.debug("正在登录...")
             server.login(sender, auth)
+            logger.debug("正在发送邮件...")
             server.sendmail(sender, [receiver], msg.as_string())
             server.quit()
+            logger.info(f"✅ 邮件发送成功: {subject}")
             print(f"✅ 邮件发送成功: {subject}")
             return True
         except Exception as e:
+            logger.error(f"❌ 邮件发送失败: {e}", exc_info=True)
             print(f"❌ 邮件发送失败: {e}")
             return False
 
@@ -68,10 +99,12 @@ class NotificationManager:
     def __init__(self):
         self.senders = {}
         # 默认注册邮件推送
+        logger.info("初始化通知管理器")
         self.register_sender("email", EmailSender())
     
     def register_sender(self, name, sender):
         """注册新的推送方式"""
+        logger.info(f"注册推送方式: {name}")
         self.senders[name] = sender
     
     def get_sender(self, name):
@@ -80,10 +113,12 @@ class NotificationManager:
     
     def send_notification(self, sender_name, subject, content):
         """发送通知"""
+        logger.info(f"使用 {sender_name} 发送通知: {subject}")
         sender = self.get_sender(sender_name)
         if sender:
             return sender.send(subject, content)
         else:
+            logger.error(f"❌ 未找到名为 {sender_name} 的推送方式")
             print(f"❌ 未找到名为 {sender_name} 的推送方式")
             return False
     
@@ -98,10 +133,12 @@ notification_manager = NotificationManager()
 
 def send_notification(sender_name, subject, content):
     """通用通知发送函数"""
+    logger.debug(f"调用 send_notification: sender={sender_name}, subject={subject}")
     return notification_manager.send_notification(sender_name, subject, content)
 
 
 def send_grade_mail(changed):
+    logger.info(f"准备发送成绩更新邮件，变化数: {len(changed)}")
     rows = "".join(
         f"<tr><td>{k}</td><td>{v}</td></tr>"
         for k, v in changed.items()
@@ -118,6 +155,7 @@ def send_grade_mail(changed):
 
 def send_all_grades(grades):
     """发送全部成绩"""
+    logger.info(f"准备发送全部成绩，课程数: {len(grades)}")
     rows = "".join(
         f"<tr><td>{g['课程名称']}</td><td>{g['成绩']}</td><td>{g['学期']}</td></tr>"
         for g in grades
@@ -133,6 +171,7 @@ def send_all_grades(grades):
 
 
 def send_schedule_mail(courses, week, weekday):
+    logger.info(f"准备发送课表邮件，第{week}周 周{weekday}，课程数: {len(courses)}")
     rows = "".join(
         f"<tr><td>{c['课程名称']}</td><td>{c['开始小节']}-{c['结束小节']}</td><td>{c['教室']}</td></tr>"
         for c in courses
@@ -149,6 +188,7 @@ def send_schedule_mail(courses, week, weekday):
 
 def send_today_schedule(courses, week, weekday):
     """发送当天课表"""
+    logger.info(f"准备发送今日课表，第{week}周 周{weekday}，课程数: {len(courses)}")
     rows = "".join(
         f"<tr><td>{c['课程名称']}</td><td>{c['开始小节']}-{c['结束小节']}</td><td>{c['教室']}</td></tr>"
         for c in courses
@@ -165,6 +205,7 @@ def send_today_schedule(courses, week, weekday):
 
 def send_full_schedule(courses, week_count):
     """发送本学期全部课表"""
+    logger.info(f"准备发送全部课表，总周数: {week_count}")
     rows = []
     for day_courses in courses:
         for course in day_courses:
