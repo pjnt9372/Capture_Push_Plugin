@@ -229,11 +229,12 @@ def parse_grades(html):
             continue
 
         course = {
-            "课程名称": cols[2].get_text(strip=True),
-            "学分": cols[3].get_text(strip=True),
+            "课程编号": cols[2].get_text(strip=True),
+            "课程名称": cols[3].get_text(strip=True),
             "成绩": cols[4].get_text(strip=True),
             "学期": cols[1].get_text(strip=True),
             "课程属性": cols[5].get_text(strip=True) if len(cols) > 5 else "",
+            "学分": cols[6].get_text(strip=True) if len(cols) > 6 else "",  # 添加学分字段
         }
         grades.append(course)
 
