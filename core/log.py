@@ -2,7 +2,7 @@
 """
 统一日志管理模块
 提供项目级别的日志配置和初始化功能
-仅支持打包后的生产环境，出现问题直接崩溃
+支持脚本形式在用户处运行，配置和日志统一使用 AppData 目录
 """
 import logging
 import logging.config
@@ -13,17 +13,15 @@ from pathlib import Path
 
 def get_config_path():
     """
-    获取配置文件路径（仅生产环境）
+    获取配置文件路径（AppData 目录）
     
     Returns:
         Path: 配置文件路径对象
     
     Raises:
-        RuntimeError: 如果无法获取 AppData 目录或配置文件不存在
+        RuntimeError: 如果无法获取 AppData 目录
+        FileNotFoundError: 如果配置文件不存在
     """
-    if not getattr(sys, 'frozen', False):
-        raise RuntimeError("仅支持打包后的生产环境运行")
-    
     # 获取 AppData 目录
     localappdata = os.environ.get('LOCALAPPDATA')
     if not localappdata:
@@ -40,7 +38,7 @@ def get_config_path():
 
 def get_log_file_path(module_name):
     """
-    获取日志文件路径（仅生产环境）
+    获取日志文件路径（AppData 目录）
     
     Args:
         module_name: 模块名称，用于生成日志文件名
@@ -51,9 +49,6 @@ def get_log_file_path(module_name):
     Raises:
         RuntimeError: 如果无法获取 AppData 目录
     """
-    if not getattr(sys, 'frozen', False):
-        raise RuntimeError("仅支持打包后的生产环境运行")
-    
     localappdata = os.environ.get('LOCALAPPDATA')
     if not localappdata:
         raise RuntimeError("无法获取 LOCALAPPDATA 环境变量")
@@ -68,7 +63,7 @@ def get_log_file_path(module_name):
 
 def init_logger(module_name):
     """
-    初始化日志系统（仅生产环境）
+    初始化日志系统（AppData 目录）
     
     Args:
         module_name: 模块名称，用于生成日志文件名（如 'push', 'getCourseGrades'）
@@ -81,9 +76,6 @@ def init_logger(module_name):
         RuntimeError: 无法获取环境变量或初始化失败
         Exception: logging.config.fileConfig 抛出的任何异常
     """
-    if not getattr(sys, 'frozen', False):
-        raise RuntimeError("仅支持打包后的生产环境运行")
-    
     config_path = get_config_path()
     log_file_path = get_log_file_path(module_name)
     

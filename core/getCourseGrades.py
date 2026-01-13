@@ -8,13 +8,13 @@ import os
 import json
 import time
 
-# 导入统一日志模块（仅生产环境）
+# 导入统一日志模块（AppData 目录）
 from log import init_logger, get_config_path
 
 # 初始化日志（如果失败直接崩溃）
 logger = init_logger('getCourseGrades')
 
-# 获取配置文件路径（如果失败直接崩溃）
+# 获取配置文件路径（AppData 目录，如果失败直接崩溃）
 CONFIG_PATH = str(get_config_path())
 
 # ===== 2. 读取运行模式 =====
