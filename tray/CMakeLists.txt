@@ -10,4 +10,16 @@ add_definitions(-DUNICODE -D_UNICODE)
 add_executable(TrayApp WIN32 tray_app.cpp)
 
 # 链接必要的Windows库
-target_link_libraries(TrayApp shlwapi)
+target_link_libraries(TrayApp 
+    shlwapi
+    user32
+    gdi32
+    shell32
+    ole32
+    oleaut32
+    uuid
+    comdlg32
+    advapi32
+    kernel32
+    winspool
+)
