@@ -83,6 +83,30 @@ void ExecutePythonCommand(const std::string& command_suffix);
 void ExecuteConfigGui();
 void EditConfigFile();
 void InitializeLog();
+void EnsureAppDataDirectory();
+void ReadLoopConfig();
+int GetMinLoopInterval();
+void ExecuteLoopCheck();
+bool CheckPythonEnvironment();
+LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+// 确保 AppData 目录存在
+void EnsureAppDataDirectory() {
+    char appdata_path[MAX_PATH];
+    if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, appdata_path) == S_OK) {
+        std::string appdata_dir = std::string(appdata_path) + "\\GradeTracker";
+        
+        // 创建应用目录
+        BOOL result = CreateDirectoryA(appdata_dir.c_str(), NULL);
+        if (result || GetLastError() == ERROR_ALREADY_EXISTS) {
+            LOG_INFO("AppData 目录已确保存在: " + appdata_dir);
+        } else {
+            LOG_WARNING("无法创建 AppData 目录: " + appdata_dir);
+        }
+    } else {
+        LOG_WARNING("无法获取 AppData 目录路径");
+    }
+}
 
 // 初始化日志系统
 void InitializeLog() {
@@ -130,8 +154,32 @@ void InitializeLog() {
 // 读取配置文件
 void ReadLoopConfig() {
     LOG_INFO("开始读取循环检测配置");
-    std::string exe_dir = GetExecutableDirectory();
-    std::string config_path = exe_dir + "\\config.ini";
+    
+    // 优先从 AppData 目录读取配置文件
+    char appdata_path[MAX_PATH];
+    std::string config_path;
+    
+    if (SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, appdata_path) == S_OK) {
+        std::string appdata_config_dir = std::string(appdata_path) + "\\GradeTracker";
+        config_path = appdata_config_dir + "\\config.ini";
+        LOG_DEBUG("尝试从 AppData 目录读取配置: " + config_path);
+        
+        // 检查 AppData 目录中的配置文件是否存在
+        std::ifstream appdata_config_file(config_path);
+        if (!appdata_config_file.is_open()) {
+            LOG_WARNING("AppData 目录中未找到配置文件，回退到程序目录");
+            // 回退到程序目录
+            std::string exe_dir = GetExecutableDirectory();
+            config_path = exe_dir + "\\config.ini";
+        } else {
+            appdata_config_file.close();
+        }
+    } else {
+        // 如果无法获取 AppData 目录，使用程序目录
+        std::string exe_dir = GetExecutableDirectory();
+        config_path = exe_dir + "\\config.ini";
+        LOG_WARNING("无法获取 AppData 目录，使用程序目录: " + exe_dir);
+    }
     
     LOG_DEBUG("配置文件路径: " + config_path);
     
@@ -521,6 +569,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     // 初始化日志系统
     InitializeLog();
+    
+    // 确保 AppData 目录存在
+    EnsureAppDataDirectory();
     
     LOG_INFO("========== 应用程序开始启动 ==========");
     
