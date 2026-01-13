@@ -28,13 +28,20 @@ Source: "dist\GradeTracker_Installer.exe"; DestDir: "{app}"; Flags: ignoreversio
 ; Python脚本和配置
 Source: "core\*"; DestDir: "{app}\core"; Flags: ignoreversion recursesubdirs
 Source: "gui\*"; DestDir: "{app}\gui"; Flags: ignoreversion recursesubdirs
+
+; 配置文件 - 同时释放到程序目录和 AppData 目录
 Source: "config.ini"; DestDir: "{app}"; Flags: ignoreversion
+Source: "config.ini"; DestDir: "{localappdata}\GradeTracker"; Flags: ignoreversion
 
 ; 配置生成脚本
 Source: "generate_config.py"; DestDir: "{app}"; Flags: ignoreversion
 
 ; C++托盘程序（需要预先编译）
 Source: "tray\out\build\x64-Release\TrayApp.exe"; DestDir: "{app}"; Flags: ignoreversion
+
+[Dirs]
+; 创建 AppData 目录
+Name: "{localappdata}\GradeTracker"
 
 [Icons]
 Name: "{group}\学业助手托盘"; Filename: "{app}\TrayApp.exe"
@@ -67,12 +74,15 @@ Filename: "{app}\TrayApp.exe"; Description: "启动学业助手托盘程序"; Fl
 Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\gui\gui.py"""; Description: "打开配置工具"; Flags: nowait postinstall skipifsilent unchecked
 
 [UninstallDelete]
+; 清理程序目录
 Type: filesandordirs; Name: "{app}\.venv"
 Type: files; Name: "{app}\install_config.txt"
 Type: files; Name: "{app}\app.log"
 Type: filesandordirs; Name: "{app}\core\state"
 Type: filesandordirs; Name: "{app}\core\__pycache__"
 Type: filesandordirs; Name: "{app}\gui\__pycache__"
+; 清理 AppData 目录中的日志文件（保留配置文件让用户自行删除）
+Type: files; Name: "{localappdata}\GradeTracker\*.log"
 
 [Code]
 // 初始化安装

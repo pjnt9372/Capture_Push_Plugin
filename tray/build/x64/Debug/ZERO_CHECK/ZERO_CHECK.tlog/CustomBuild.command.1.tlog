@@ -1,0 +1,10 @@
+^E:\REASCOURSE\PYCHARME\CAPTURE_PUSH\TRAY\BUILD\CMAKEFILES\809FB5A89811F34B039493D8A935FD33\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SE:/reascourse/pycharme/Capture_Push/tray -BE:/reascourse/pycharme/Capture_Push/tray/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file E:/reascourse/pycharme/Capture_Push/tray/build/TrayApp.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

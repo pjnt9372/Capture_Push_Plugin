@@ -8,10 +8,16 @@ from PySide6.QtWidgets import (
     QCheckBox, QSpinBox, QHBoxLayout, QGroupBox
 )
 
-# 动态计算配置文件路径
+# 添加父目录到 sys.path（确保能找到 core 模块）
 BASE_DIR = Path(__file__).resolve().parent.parent
-CONFIG_FILE = BASE_DIR / "config.ini"
-CONFIG_FILE = str(CONFIG_FILE)
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+# 导入统一配置路径管理
+from core.log import get_config_path
+
+# 使用统一的配置路径管理（AppData 目录）
+CONFIG_FILE = str(get_config_path())
 
 class ConfigWindow(QWidget):
     def __init__(self):

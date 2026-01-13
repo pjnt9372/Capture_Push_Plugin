@@ -3,71 +3,23 @@ import requests
 import base64
 from bs4 import BeautifulSoup
 import socket
-import logging
-import logging.config
 import configparser
 import os
 import json
 import time
-
-# ===== 1. 初始化日志 =====
-import sys
-import configparser
 from pathlib import Path
-import os
-import logging.handlers
-# 使用可执行文件所在目录或脚本所在目录作为基础路径
-if getattr(sys, 'frozen', False):
-    # 如果是打包后的exe运行
-    BASE_DIR = Path(sys._MEIPASS)
-else:
-    # 如果是正常脚本运行
-    BASE_DIR = Path(__file__).resolve().parent.parent
-CONFIG_PATH = BASE_DIR / 'config.ini'
-CONFIG_PATH = str(CONFIG_PATH)
 
-# 确定日志文件路径（使用用户 AppData 目录）
-if getattr(sys, 'frozen', False):
-    # 打包后的环境，使用 AppData\Local\GradeTracker
-    appdata_dir = Path(os.environ.get('LOCALAPPDATA', os.environ.get('APPDATA', '.'))) / 'GradeTracker'
-    appdata_dir.mkdir(parents=True, exist_ok=True)
-    log_file_path = appdata_dir / 'getCourseGrades.log'
-else:
-    # 开发环境，使用当前目录
-    log_file_path = Path('getCourseGrades.log')
+# 导入统一日志模块（AppData 目录）
+from log import init_logger, get_config_path, get_log_file_path
 
-try:
-    # 先尝试加载 config.ini 中的日志配置
-    logging.config.fileConfig(CONFIG_PATH)
-    
-    # 检查是否成功加载了 FileHandler，如果是，则替换其文件路径
-    root_logger = logging.getLogger()
-    for handler in root_logger.handlers[:]:
-        if isinstance(handler, logging.FileHandler):
-            # 关闭原处理器并移除
-            handler.close()
-            root_logger.removeHandler(handler)
-    
-    # 添加新的文件处理器到用户可写目录
-    file_handler = logging.FileHandler(str(log_file_path), encoding='utf-8')
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(formatter)
-    root_logger.addHandler(file_handler)
-    
-    logger = root_logger
-    logger.info(f"成功加载 config.ini 中的日志配置，文件处理器已重定向到: {log_file_path}")
-except (configparser.Error, Exception) as e:
-    # 配置文件有问题，使用自定义配置
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(),  # 控制台输出
-            logging.FileHandler(str(log_file_path), encoding='utf-8')  # 文件输出到用户目录
-        ]
-    )
-    logger = logging.getLogger(__name__)
-    logger.warning(f"未能加载 config.ini 日志配置，使用默认配置到 {log_file_path}: {e}")
+# 初始化日志（如果失败直接崩溃）
+logger = init_logger('getCourseGrades')
+
+# 获取配置文件路径（AppData 目录，如果失败直接崩溃）
+CONFIG_PATH = str(get_config_path())
+
+# 获取 AppData 工作目录（用于存放缓存文件）
+APPDATA_DIR = get_log_file_path('getCourseGrades').parent
 
 # ===== 2. 读取运行模式 =====
 def get_run_mode():
@@ -135,8 +87,10 @@ def login(username, password):
         logger.warning("检测到验证码，脚本无法处理")
     else:
         logger.error("登录失败，未知原因")
-        with open("login_failed_grade.html", "w", encoding="utf-8") as f:
+        failed_file = APPDATA_DIR / "login_failed_grade.html"
+        with open(failed_file, "w", encoding="utf-8") as f:
             f.write(response.text)
+        logger.debug(f"登录失败响应已保存到: {failed_file}")
     return None
 
 # ===== 5. 循环检测配置读取 =====
@@ -163,16 +117,16 @@ def should_update_grades():
         logger.info("循环检测未启用，将从网络获取最新成绩")
         return True
     
-    # 检查本地缓存文件是否存在
-    cache_file = "grade.html"
-    timestamp_file = "grade_timestamp.txt"
+    # 检查本地缓存文件是否存在（AppData 目录）
+    cache_file = APPDATA_DIR / "grade.html"
+    timestamp_file = APPDATA_DIR / "grade_timestamp.txt"
     
-    if not os.path.exists(cache_file):
+    if not cache_file.exists():
         logger.info("本地成绩缓存不存在，需要从网络获取")
         return True
     
     # 检查时间戳文件
-    if not os.path.exists(timestamp_file):
+    if not timestamp_file.exists():
         logger.info("时间戳文件不存在，需要从网络获取")
         return True
     
@@ -197,35 +151,37 @@ def should_update_grades():
 
 # ===== 7. 更新时间戳 =====
 def update_timestamp():
-    """更新成绩获取时间戳"""
-    timestamp_file = "grade_timestamp.txt"
+    """更新成绩获取时间戳（AppData 目录）"""
+    timestamp_file = APPDATA_DIR / "grade_timestamp.txt"
     try:
         with open(timestamp_file, "w", encoding="utf-8") as f:
             f.write(str(time.time()))
-        logger.info("时间戳已更新")
+        logger.info(f"时间戳已更新: {timestamp_file}")
     except Exception as e:
         logger.error(f"更新时间戳失败: {e}")
 
 # ===== 8. 获取成绩 HTML =====
 def get_grade_html(session, force_update=False):
-    """获取成绩HTML，支持循环检测"""
+    """获取成绩HTML，支持循环检测。所有文件存储在 AppData 目录。"""
+    cache_file = APPDATA_DIR / "grade.html"
+    
     if RUN_MODE == 'DEV':
-        logger.info("[DEV 模式] 从本地文件 'grade.html' 读取成绩数据")
+        logger.info(f"[DEV 模式] 从 AppData 文件读取成绩数据: {cache_file}")
         try:
-            with open("grade.html", "r", encoding="utf-8") as f:
+            with open(cache_file, "r", encoding="utf-8") as f:
                 return f.read()
         except FileNotFoundError:
-            logger.error("未找到 grade.html，请先在 BUILD 模式运行生成")
+            logger.error(f"未找到 {cache_file}，请先在 BUILD 模式运行生成")
             return None
         except Exception as e:
-            logger.error(f"读取 grade.html 失败: {e}")
+            logger.error(f"读取 {cache_file} 失败: {e}")
             return None
     
     # 检查是否需要更新
     if not force_update and not should_update_grades():
         logger.info("使用本地缓存的成绩数据")
         try:
-            with open("grade.html", "r", encoding="utf-8") as f:
+            with open(cache_file, "r", encoding="utf-8") as f:
                 return f.read()
         except Exception as e:
             logger.warning(f"读取本地缓存失败: {e}，将从网络获取")
@@ -242,14 +198,17 @@ def get_grade_html(session, force_update=False):
 
     if "N122101QueryResult" in response.text or "kscj" in response.text:
         logger.info("成功获取成绩数据")
-        with open("grade.html", "w", encoding="utf-8") as f:
+        with open(cache_file, "w", encoding="utf-8") as f:
             f.write(response.text)
+        logger.debug(f"成绩数据已缓存到: {cache_file}")
         update_timestamp()  # 更新时间戳
         return response.text
     else:
         logger.error("未识别到有效成绩内容")
-        with open("grade_failed.html", "w", encoding="utf-8") as f:
+        failed_file = APPDATA_DIR / "grade_failed.html"
+        with open(failed_file, "w", encoding="utf-8") as f:
             f.write(response.text)
+        logger.debug(f"失败响应已保存到: {failed_file}")
         return None
 
 # ===== 9. 解析成绩 =====
@@ -270,11 +229,12 @@ def parse_grades(html):
             continue
 
         course = {
-            "课程名称": cols[2].get_text(strip=True),
-            "学分": cols[3].get_text(strip=True),
+            "课程编号": cols[2].get_text(strip=True),
+            "课程名称": cols[3].get_text(strip=True),
             "成绩": cols[4].get_text(strip=True),
             "学期": cols[1].get_text(strip=True),
             "课程属性": cols[5].get_text(strip=True) if len(cols) > 5 else "",
+            "学分": cols[6].get_text(strip=True) if len(cols) > 6 else "",  # 添加学分字段
         }
         grades.append(course)
 
@@ -319,22 +279,34 @@ def fetch_grades(username, password, force_update=False):
 
 # ===== 12. 主程序入口 =====
 def main():
-    if RUN_MODE == 'DEV':
-        print("【开发模式】从 grade.html 读取成绩")
-        grades = fetch_grades("", "")
-    else:
-        username = input("请输入学号: ").strip()
-        password = input("请输入密码: ").strip()
-        if not username or not password:
-            print("❌ 学号或密码不能为空")
-            return
-        grades = fetch_grades(username, password)
+    """
+    主程序入口，从配置文件读取账号密码
+    支持 --force 参数强制从网络更新
+    """
+    import sys
+    force_update = '--force' in sys.argv
+    
+    # 从配置文件读取账号密码
+    config = configparser.ConfigParser()
+    config.read(CONFIG_PATH, encoding='utf-8')
+    username = config.get('account', 'username', fallback='')
+    password = config.get('account', 'password', fallback='')
+    
+    if not username or not password:
+        logger.error("配置文件中未设置账号或密码")
+        print("❌ 配置文件中未设置账号或密码，请先配置 [account] 节")
+        return
+    
+    logger.info(f"开始获取成绩（强制更新: {force_update}）")
+    grades = fetch_grades(username, password, force_update)
 
     if grades is not None:
         print_grades(grades)
         print("✅ 成绩解析完成")
+        logger.info("成绩解析完成")
     else:
         print("❌ 成绩获取或解析失败")
+        logger.error("成绩获取或解析失败")
 
 if __name__ == "__main__":
     main()
