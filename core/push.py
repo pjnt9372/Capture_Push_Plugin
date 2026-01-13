@@ -8,13 +8,13 @@ from email.header import Header
 from email.mime.multipart import MIMEMultipart
 from abc import ABC, abstractmethod
 
-# 导入统一日志模块
+# 导入统一日志模块（仅生产环境）
 from log import init_logger, get_config_path
 
-# 初始化日志
+# 初始化日志（如果失败直接崩溃）
 logger = init_logger('push')
 
-# 获取配置文件路径
+# 获取配置文件路径（如果失败直接崩溃）
 CONFIG_PATH = get_config_path()
 
 

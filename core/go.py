@@ -10,9 +10,11 @@ from pathlib import Path
 from core.getCourseGrades import fetch_grades
 from core.getCourseSchedule import fetch_course_schedule
 from core.push import send_grade_mail, send_schedule_mail
+
+# 导入统一配置路径管理（仅生产环境）
 from core.log import get_config_path
 
-# 使用统一的配置路径管理
+# 使用统一的配置路径管理（如果失败直接崩溃）
 CONFIG_FILE = str(get_config_path())
 
 STATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")

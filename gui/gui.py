@@ -2,22 +2,20 @@ import sys
 import os
 import configparser
 from pathlib import Path
-
-# 确保能找到 core 模块
-if getattr(sys, 'frozen', False):
-    # 打包后的环境
-    BASE_DIR = Path(sys._MEIPASS)
-else:
-    # 开发环境 - 添加父目录到 sys.path
-    BASE_DIR = Path(__file__).resolve().parent.parent
-    if str(BASE_DIR) not in sys.path:
-        sys.path.insert(0, str(BASE_DIR))
-
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel,
     QLineEdit, QPushButton, QFormLayout, QMessageBox,
     QCheckBox, QSpinBox, QHBoxLayout, QGroupBox
 )
+
+# 确保能找到 core 模块（仅生产环境）
+if not getattr(sys, 'frozen', False):
+    raise RuntimeError("仅支持打包后的生产环境运行")
+
+# 添加父目录到 sys.path
+BASE_DIR = Path(sys._MEIPASS)
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 # 导入统一配置路径管理
 from core.log import get_config_path
