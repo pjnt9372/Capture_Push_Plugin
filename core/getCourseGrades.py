@@ -3,81 +3,19 @@ import requests
 import base64
 from bs4 import BeautifulSoup
 import socket
-import logging
-import logging.config
 import configparser
 import os
 import json
 import time
 
-# ===== 1. 初始化日志 =====
-import sys
-import configparser
-from pathlib import Path
-import os
-import logging.handlers
-# 使用可执行文件所在目录或脚本所在目录作为基础路径
-if getattr(sys, 'frozen', False):
-    # 如果是打包后的exe运行，从 AppData 目录读取配置
-    appdata_dir = Path(os.environ.get('LOCALAPPDATA', os.environ.get('APPDATA', '.'))) / 'GradeTracker'
-    appdata_dir.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH = appdata_dir / 'config.ini'
-    
-    # 如果 AppData 目录中没有 config.ini，则从原始位置复制一份
-    if not CONFIG_PATH.exists():
-        import shutil
-        original_base = Path(sys._MEIPASS)
-        original_config = original_base / 'config.ini'
-        if original_config.exists():
-            shutil.copy2(original_config, CONFIG_PATH)
-else:
-    # 如果是正常脚本运行
-    BASE_DIR = Path(__file__).resolve().parent.parent
-    CONFIG_PATH = BASE_DIR / 'config.ini'
-CONFIG_PATH = str(CONFIG_PATH)
+# 导入统一日志模块
+from log import init_logger, get_config_path
 
-# 确定日志文件路径（使用用户 AppData 目录）
-if getattr(sys, 'frozen', False):
-    # 打包后的环境，使用 AppData\Local\GradeTracker
-    appdata_dir = Path(os.environ.get('LOCALAPPDATA', os.environ.get('APPDATA', '.'))) / 'GradeTracker'
-    appdata_dir.mkdir(parents=True, exist_ok=True)
-    log_file_path = appdata_dir / 'getCourseGrades.log'
-else:
-    # 开发环境，使用当前目录
-    log_file_path = Path('getCourseGrades.log')
+# 初始化日志
+logger = init_logger('getCourseGrades')
 
-try:
-    # 先尝试加载 config.ini 中的日志配置
-    logging.config.fileConfig(CONFIG_PATH)
-    
-    # 检查是否成功加载了 FileHandler，如果是，则替换其文件路径
-    root_logger = logging.getLogger()
-    for handler in root_logger.handlers[:]:
-        if isinstance(handler, logging.FileHandler):
-            # 关闭原处理器并移除
-            handler.close()
-            root_logger.removeHandler(handler)
-    
-    # 添加新的文件处理器到用户可写目录
-    file_handler = logging.FileHandler(str(log_file_path), encoding='utf-8')
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(formatter)
-    root_logger.addHandler(file_handler)
-    
-    logger = root_logger
-    logger.info(f"成功加载 config.ini 中的日志配置，文件处理器已重定向到: {log_file_path}")
-except (configparser.Error, Exception) as e:
-    # 配置文件有问题，使用自定义配置
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(),  # 控制台输出
-            logging.FileHandler(str(log_file_path), encoding='utf-8')  # 文件输出到用户目录
-        ]
-    )
-    logger = logging.getLogger(__name__)
-    logger.warning(f"未能加载 config.ini 日志配置，使用默认配置到 {log_file_path}: {e}")
+# 获取配置文件路径
+CONFIG_PATH = str(get_config_path())
 
 # ===== 2. 读取运行模式 =====
 def get_run_mode():

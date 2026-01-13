@@ -10,17 +10,10 @@ from pathlib import Path
 from core.getCourseGrades import fetch_grades
 from core.getCourseSchedule import fetch_course_schedule
 from core.push import send_grade_mail, send_schedule_mail
+from core.log import get_config_path
 
-# 根据运行环境确定配置文件路径
-if getattr(sys, 'frozen', False):
-    # 如果是打包后的exe运行，从 AppData 目录读取配置
-    appdata_dir = Path(os.environ.get('LOCALAPPDATA', os.environ.get('APPDATA', '.'))) / 'GradeTracker'
-    appdata_dir.mkdir(parents=True, exist_ok=True)
-    CONFIG_FILE = str(appdata_dir / 'config.ini')
-else:
-    # 如果是正常脚本运行
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    CONFIG_FILE = os.path.join(BASE_DIR, "config.ini")
+# 使用统一的配置路径管理
+CONFIG_FILE = str(get_config_path())
 
 STATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
 os.makedirs(STATE_DIR, exist_ok=True)
