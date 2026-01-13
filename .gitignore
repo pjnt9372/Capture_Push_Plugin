@@ -19,6 +19,7 @@ app.log
 # Build artifacts
 tray/.vs/
 tray/out/
+tray/build/
 
 # Executables
 *.exe
