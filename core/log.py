@@ -74,27 +74,33 @@ def init_logger(module_name):
     Raises:
         FileNotFoundError: 配置文件不存在
         RuntimeError: 无法获取环境变量或初始化失败
-        Exception: logging.config.fileConfig 抛出的任何异常
     """
     config_path = get_config_path()
     log_file_path = get_log_file_path(module_name)
     
-    # 从 config.ini 加载日志配置（如果失败直接崩溃）
-    logging.config.fileConfig(str(config_path), disable_existing_loggers=False)
-    
     # 获取 root logger
     root_logger = logging.getLogger()
     
-    # 移除所有现有的 FileHandler，避免多进程冲突
+    # 移除所有现有的处理器
     for handler in root_logger.handlers[:]:
         if isinstance(handler, logging.FileHandler):
             handler.close()
-            root_logger.removeHandler(handler)
+        root_logger.removeHandler(handler)
+    
+    # 设置日志级别
+    root_logger.setLevel(logging.DEBUG)
+    
+    # 创建控制台处理器
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
+    console_handler.setFormatter(console_formatter)
+    console_handler.setLevel(logging.DEBUG)
+    root_logger.addHandler(console_handler)
     
     # 添加新的文件处理器到 AppData 目录（强制 UTF-8 编码）
     file_handler = logging.FileHandler(str(log_file_path), encoding='utf-8', mode='a')
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
-    file_handler.setFormatter(formatter)
+    file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
+    file_handler.setFormatter(file_formatter)
     file_handler.setLevel(logging.DEBUG)
     root_logger.addHandler(file_handler)
     

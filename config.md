@@ -1,93 +1,6 @@
 # 🔍 `config.ini` 各部分详解
 
-## 📌 `[loggers]`
-
-**作用**：声明本配置文件中定义了哪些 **logger 实例**（日志记录器）。
-
-- `keys=root`  
-  表示只定义了一个名为 `root` 的 logger（即根 logger）。
-
-> 💡 在 Python 中，所有 logger 都继承自 root logger。如果你不创建子 logger，直接用 `logging.getLogger()` 获取的就是 root。
-
----
-
-## 📌 `[handlers]`
-
-**作用**：声明本配置中定义了哪些 **处理器（Handler）**，用于决定日志输出到哪里。
-
-- `keys=consoleHandler,fileHandler`  
-  表示定义了两个 handler：
-  - `consoleHandler`：输出到控制台（终端）
-  - `fileHandler`：输出到文件
-
-> ✅ Handler 是日志的“出口”，可以有多个（如同时打屏 + 写文件）。
-
----
-
-## 📌 `[formatters]`
-
-**作用**：声明定义了哪些 **格式化器（Formatter）**，用于控制日志的显示格式。
-
-- `keys=simpleFormatter`  
-  表示定义了一个名为 `simpleFormatter` 的格式模板。
-
-> 📝 格式决定了日志长什么样，比如是否包含时间、级别、函数名等。
-
----
-
-## 📌 `[logger_root]`
-
-**作用**：具体配置 **root logger** 的行为。
-
-| 配置项    | 值                                | 说明 |
-|----------|-----------------------------------|------|
-| `level`  | `DEBUG`                           | 最低日志级别。只有 >= DEBUG 的日志（DEBUG/INFO/WARNING/ERROR/CRITICAL）才会被处理。若改为 `INFO`，则 DEBUG 日志会被过滤掉。 |
-| `handlers` | `consoleHandler,fileHandler`    | 指定 root logger 使用哪几个 handler 输出日志（必须在 `[handlers]` 中声明过） |
-
-> ⚠️ 注意：`logger_root` 是固定命名规则 —— `[logger_名称]` 对应 `[loggers]` 中的 `keys`。
-
----
-
-## 📌 `[handler_consoleHandler]`
-
-**作用**：配置名为 `consoleHandler` 的处理器（输出到控制台）。
-
-| 配置项      | 值                | 说明 |
-|------------|-------------------|------|
-| `class`    | `StreamHandler`   | 使用 `logging.StreamHandler` 类，将日志输出到流（如 `stdout`/`stderr`） |
-| `level`    | `DEBUG`           | 此 handler 自身的过滤级别（即使 logger 允许 DEBUG，这里设为 INFO 也会过滤掉 DEBUG） |
-| `formatter`| `simpleFormatter` | 指定使用哪个 formatter（必须在 `[formatters]` 中声明） |
-| `args`     | `(sys.stdout,)`   | 传递给 `StreamHandler` 构造函数的参数。<br>`sys.stdout` 表示输出到标准输出（终端） |
-
-> ⚠️ 注意：INI 中不能直接写 `sys.stdout`，需确保解析时能识别（`fileConfig` 会自动处理）  
-> ✅ 实际效果：日志打印到命令行窗口。
-
----
-
-## 📌 `[handler_fileHandler]`
-
-**作用**：配置名为 `fileHandler` 的处理器（输出到文件）。
-
-| 配置项      | 值                     | 说明 |
-|------------|------------------------|------|
-| `class`    | `FileHandler`          | 使用 `logging.FileHandler`，将日志写入文件 |
-| `level`    | `DEBUG`                | 同样可独立设置过滤级别 |
-| `formatter`| `simpleFormatter`      | 使用相同的格式 |
-| `args`     | `('app.log', 'a')`     | 传递给 `FileHandler` 的参数：<br> - `'app.log'`：日志文件名<br> - `'a'`：追加模式（append），不会覆盖旧日志 |
-
-> ✅ 实际效果：日志同时保存到 `app.log` 文件中。
-
----
-
-## 📌 `[formatter_simpleFormatter]`
-
-**作用**：定义日志的文本格式。
-
-| 配置项     | 值                                                                 | 说明 |
-|-----------|--------------------------------------------------------------------|------|
-| `format`  | `%(asctime)s - %(levelname)s - %(funcName)s - %(message)s`         | 日志格式模板：<br> - `%(asctime)s`：时间戳（如 `2026-01-12 14:30:45,123`）<br> - `%(levelname)s`：日志级别（如 `DEBUG`）<br> - `%(funcName)s`：调用日志的函数名<br> - `%(message)s`：实际日志内容 |
-| `datefmt` | （空）                                                             | 时间格式。留空表示使用默认格式（`%Y-%m-%d %H:%M:%S,mmm`）<br>可设为 `%Y-%m-%d %H:%M:%S` 去掉毫秒 |
-
+> ⚠️ 注意：自版本更新后，日志配置已通过代码完全管理，不再依赖配置文件中的日志设置。以下日志相关配置部分已废弃，但仍保留以供参考。
 
 ## 📌 `[run_model]`
 
@@ -95,4 +8,4 @@
 
 | 配置项     | 值                     | 说明                                        |
 |-----------|-----------------------|-------------------------------------------|
-| `format`  | ` DEV `  <br/> ` BUIlD` | ` DEV ` 处于开发模式不反复拉取<br/> `BUILD` 构建模式正常拉取 |
+| `model`   | `DEV`  <br/> `BUILD` | `DEV` 处于开发模式不反复拉取<br/> `BUILD` 构建模式正常拉取 |

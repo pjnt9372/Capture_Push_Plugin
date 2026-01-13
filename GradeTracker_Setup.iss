@@ -37,7 +37,7 @@ Source: "config.ini"; DestDir: "{localappdata}\GradeTracker"; Flags: ignoreversi
 Source: "generate_config.py"; DestDir: "{app}"; Flags: ignoreversion
 
 ; C++托盘程序（需要预先编译）
-Source: "tray\out\build\x64-Release\TrayApp.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "E:\reascourse\pycharme\Capture_Push\tray\out\build\x64-Release\Release\TrayApp.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Dirs]
 ; 创建 AppData 目录
