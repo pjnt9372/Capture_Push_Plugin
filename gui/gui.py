@@ -9,8 +9,15 @@ from PySide6.QtWidgets import (
 )
 
 # 动态计算配置文件路径
-BASE_DIR = Path(__file__).resolve().parent.parent
-CONFIG_FILE = BASE_DIR / "config.ini"
+if getattr(sys, 'frozen', False):
+    # 如果是打包后的exe运行，从 AppData 目录读取配置
+    appdata_dir = Path(os.environ.get('LOCALAPPDATA', os.environ.get('APPDATA', '.'))) / 'GradeTracker'
+    appdata_dir.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE = appdata_dir / 'config.ini'
+else:
+    # 如果是正常脚本运行
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    CONFIG_FILE = BASE_DIR / "config.ini"
 CONFIG_FILE = str(CONFIG_FILE)
 
 class ConfigWindow(QWidget):

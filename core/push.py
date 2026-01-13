@@ -13,10 +13,22 @@ from abc import ABC, abstractmethod
 import os
 import logging.handlers
 if getattr(sys, 'frozen', False):
-    BASE_DIR = Path(sys._MEIPASS)
+    # 如果是打包后的exe运行，从 AppData 目录读取配置
+    appdata_dir = Path(os.environ.get('LOCALAPPDATA', os.environ.get('APPDATA', '.'))) / 'GradeTracker'
+    appdata_dir.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH = appdata_dir / 'config.ini'
+    
+    # 如果 AppData 目录中没有 config.ini，则从原始位置复制一份
+    if not CONFIG_PATH.exists():
+        import shutil
+        original_base = Path(sys._MEIPASS)
+        original_config = original_base / 'config.ini'
+        if original_config.exists():
+            shutil.copy2(original_config, CONFIG_PATH)
 else:
+    # 如果是正常脚本运行
     BASE_DIR = Path(__file__).resolve().parent.parent
-CONFIG_PATH = BASE_DIR / 'config.ini'
+    CONFIG_PATH = BASE_DIR / 'config.ini'
 
 # 确定日志文件路径（使用用户 AppData 目录）
 if getattr(sys, 'frozen', False):
