@@ -20,6 +20,7 @@
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "ole32.lib")  // for CoTaskMemFree
+#pragma comment(lib, "advapi32.lib")  // for registry functions
 
 #define WM_TRAYICON (WM_USER + 1)
 #define WM_LOOP_TIMER (WM_USER + 2)
@@ -53,6 +54,7 @@ std::ofstream g_log_file;
 std::mutex g_log_mutex;
 
 // 函数前向声明
+std::string GetInstallPathFromRegistry();
 std::string GetExecutableDirectory();
 void ExecutePythonCommand(const std::string& command_suffix);
 void ExecuteConfigGui();
@@ -78,6 +80,41 @@ std::string GetLogDirectory() {
     }
     CoTaskMemFree(localAppDataPath);
     return "";
+}
+
+// 从注册表读取安装路径
+std::string GetInstallPathFromRegistry() {
+    HKEY hKey;
+    // 尝试从 HKLM \u8bfb取
+    LONG result = RegOpenKeyExA(HKEY_LOCAL_MACHINE, 
+                                 "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment", 
+                                 0, KEY_READ, &hKey);
+    
+    if (result != ERROR_SUCCESS) {
+        return "";
+    }
+    
+    // 获取值的大小
+    DWORD type, size = 0;
+    result = RegQueryValueExA(hKey, "GradeTrackerPath", NULL, &type, NULL, &size);
+    
+    if (result != ERROR_SUCCESS) {
+        RegCloseKey(hKey);
+        return "";
+    }
+    
+    // 读取值
+    std::vector<char> buffer(size);
+    result = RegQueryValueExA(hKey, "GradeTrackerPath", NULL, &type, 
+                              reinterpret_cast<LPBYTE>(&buffer[0]), &size);
+    
+    RegCloseKey(hKey);
+    
+    if (result != ERROR_SUCCESS) {
+        return "";
+    }
+    
+    return std::string(buffer.data());
 }
 
 // 初始化日志系统
@@ -218,8 +255,17 @@ void ExecuteLoopCheck() {
     }
 }
 
-// 获取可执行文件所在目录
+// 获取可执行文件所在目录（优先从注册表读取）
 std::string GetExecutableDirectory() {
+    // 优先尝试从注册表读取安装路径
+    std::string registry_path = GetInstallPathFromRegistry();
+    if (!registry_path.empty()) {
+        LogMessage("从注册表获取到安装路径: " + registry_path);
+        return registry_path;
+    }
+    
+    // 如果注册表读取失败，回退到原来的方法
+    LogMessage("注册表读取失败，使用可执行文件目录");
     wchar_t exe_path[MAX_PATH];
     GetModuleFileNameW(NULL, exe_path, MAX_PATH);
     std::wstring wstr_exe_path(exe_path);

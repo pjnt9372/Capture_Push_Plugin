@@ -8,6 +8,7 @@ import logging
 import logging.config
 import sys
 import os
+import configparser
 from pathlib import Path
 
 
@@ -78,6 +79,12 @@ def init_logger(module_name):
     config_path = get_config_path()
     log_file_path = get_log_file_path(module_name)
     
+    # 读取配置文件获取日志级别
+    config = configparser.ConfigParser()
+    config.read(str(config_path), encoding='utf-8')
+    log_level_str = config.get('logging', 'level', fallback='DEBUG')
+    log_level = getattr(logging, log_level_str.upper(), logging.DEBUG)
+    
     # 获取 root logger
     root_logger = logging.getLogger()
     
@@ -88,26 +95,27 @@ def init_logger(module_name):
         root_logger.removeHandler(handler)
     
     # 设置日志级别
-    root_logger.setLevel(logging.DEBUG)
+    root_logger.setLevel(log_level)
     
     # 创建控制台处理器
     console_handler = logging.StreamHandler(sys.stdout)
     console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
     console_handler.setFormatter(console_formatter)
-    console_handler.setLevel(logging.DEBUG)
+    console_handler.setLevel(log_level)
     root_logger.addHandler(console_handler)
     
     # 添加新的文件处理器到 AppData 目录（强制 UTF-8 编码）
     file_handler = logging.FileHandler(str(log_file_path), encoding='utf-8', mode='a')
     file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
     file_handler.setFormatter(file_formatter)
-    file_handler.setLevel(logging.DEBUG)
+    file_handler.setLevel(log_level)
     root_logger.addHandler(file_handler)
     
     # 记录初始化信息
     root_logger.info(f"✅ 日志系统初始化成功: {module_name}")
     root_logger.info(f"📝 日志文件: {log_file_path}")
     root_logger.info(f"⚙️ 配置文件: {config_path}")
+    root_logger.info(f"📋 日志级别: {log_level_str}")
     
     return root_logger
 

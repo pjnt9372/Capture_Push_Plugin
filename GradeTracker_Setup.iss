@@ -4,8 +4,7 @@
 [Setup]
 AppName=学业助手
 AppVersion=0.0.1beta
-AppPublisher=Student Assistant Developer
-AppCopyright=Copyright (C) 2026 GradeTracker
+AppPublisher=Developer
 DefaultDirName={autopf}\GradeTracker
 DefaultGroupName=学业助手
 OutputDir=Output
@@ -93,7 +92,7 @@ begin
   // 显示欢迎信息
   MsgBox('学业助手安装程序' + #13#10 + #13#10 + 
          '✓ 内置Python环境：已就绪' + #13#10 +
-         '✓ 安装大小：约 50-60 MB' + #13#10 +
+         '✓ 安装大小：约 120 MB' + #13#10 +
          '✓ 无需系统Python' + #13#10 + #13#10 +
          '点击“下一步”继续安装', 
          mbInformation, MB_OK);

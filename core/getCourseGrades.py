@@ -10,7 +10,12 @@ import time
 from pathlib import Path
 
 # 导入统一日志模块（AppData 目录）
-from log import init_logger, get_config_path, get_log_file_path
+try:
+    # 优先尝试相对导入（从 core 目录内运行）
+    from log import init_logger, get_config_path, get_log_file_path
+except ImportError:
+    # 回退到绝对导入（从项目根目录运行）
+    from core.log import init_logger, get_config_path, get_log_file_path
 
 # 初始化日志（如果失败直接崩溃）
 logger = init_logger('getCourseGrades')
