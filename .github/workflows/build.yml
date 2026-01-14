@@ -39,14 +39,18 @@ jobs:
       - name: Setup Inno Setup Chinese Support
         shell: powershell
         run: |
-          $url = "https://raw.githubusercontent.com/jrsoftware/issrc/master/Files/Languages/ChineseSimplified.isl"
+          # 使用社区维护的中文语言包镜像，这比官方仓库的 Unofficial 目录更稳定
+          $url = "https://raw.githubusercontent.com/kira-96/Inno-Setup-Chinese-Simplified-Translation/master/ChineseSimplified.isl"
           try {
+              Write-Host "Downloading ChineseSimplified.isl from $url..."
               Invoke-WebRequest -Uri $url -OutFile "ChineseSimplified.isl" -ErrorAction Stop
-              $firstLine = Get-Content "ChineseSimplified.isl" -TotalCount 1
-              if ($firstLine -notmatch "\[LangOptions\]") {
-                  throw "Downloaded file does not appear to be a valid .isl file (Section [LangOptions] not found at start)"
+              
+              # 验证文件开头是否包含 ISL 的典型标记 [LangOptions]
+              $content = Get-Content "ChineseSimplified.isl" -Raw -Encoding utf8
+              if ($content -notmatch "\[LangOptions\]") {
+                  throw "Downloaded file is not a valid ISL file. Content starts with: $($content.Substring(0, [Math]::Min(100, $content.Length)))"
               }
-              echo "ChineseSimplified.isl downloaded and verified successfully"
+              Write-Host "ChineseSimplified.isl downloaded and verified successfully."
           } catch {
               Write-Error "Failed to download or verify ChineseSimplified.isl: $_"
               exit 1
