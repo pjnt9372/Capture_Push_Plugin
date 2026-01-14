@@ -43,7 +43,7 @@ def main():
         pyinstaller_cmd,
         "--onefile",                    # 打包成单个文件
         "--console",                    # 显示控制台窗口
-        "--name=GradeTracker_Installer", # 输出文件名
+        "--name=Capture_Push_Installer", # 输出文件名
         "--icon=NONE",                  # 暂时不设置图标
         "--clean",                      # 清理临时文件
         "--noupx",                      # 不使用 UPX 压缩（减少压缩时间和内存）
@@ -62,7 +62,7 @@ def main():
     if result.returncode == 0:
         print("\n" + "=" * 60)
         print("✓ 打包成功！")
-        print(f"输出位置: dist/GradeTracker_Installer.exe")
+        print(f"输出位置: dist/Capture_Push_Installer.exe")
         print("=" * 60)
     else:
         print("\n✗ 打包失败！")

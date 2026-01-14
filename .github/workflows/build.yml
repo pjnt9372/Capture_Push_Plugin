@@ -60,20 +60,20 @@ jobs:
 
       - name: Build Installer with Inno Setup
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" GradeTracker_Setup.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" Capture_Push_Setup.iss
         shell: powershell
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GradeTracker-Setup
-          path: Output/GradeTracker_Setup.exe
+          name: Capture_Push-Setup
+          path: Output/Capture_Push_Setup.exe
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         with:
-          files: Output/GradeTracker_Setup.exe
+          files: Output/Capture_Push_Setup.exe
           tag_name: v${{ github.run_number }}
           name: Release v${{ github.run_number }}
           body: |

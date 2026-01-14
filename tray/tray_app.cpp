@@ -63,12 +63,12 @@ void InitLogging();
 void CloseLogging();
 void LogMessage(const std::string& message);
 
-// 获取 %LOCALAPPDATA%\GradeTracker 路径并创建目录
+// 获取 %LOCALAPPDATA%\Capture_Push 路径并创建目录
 std::string GetLogDirectory() {
     PWSTR localAppDataPath = nullptr;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &localAppDataPath))) {
         std::wstring logDirW(localAppDataPath);
-        logDirW += L"\\GradeTracker";
+        logDirW += L"\\Capture_Push";
         CreateDirectoryW(logDirW.c_str(), NULL); // 自动忽略已存在错误
 
         int size_needed = WideCharToMultiByte(CP_UTF8, 0, logDirW.c_str(), -1, NULL, 0, NULL, NULL);
@@ -85,9 +85,9 @@ std::string GetLogDirectory() {
 // 从注册表读取安装路径
 std::string GetInstallPathFromRegistry() {
     HKEY hKey;
-    // 尝试从 HKLM \u8bfb取
+    // 尝试从 HKLM 读取
     LONG result = RegOpenKeyExA(HKEY_LOCAL_MACHINE, 
-                                 "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment", 
+                                 "SOFTWARE\\Capture_Push", 
                                  0, KEY_READ, &hKey);
     
     if (result != ERROR_SUCCESS) {
@@ -96,7 +96,7 @@ std::string GetInstallPathFromRegistry() {
     
     // 获取值的大小
     DWORD type, size = 0;
-    result = RegQueryValueExA(hKey, "GradeTrackerPath", NULL, &type, NULL, &size);
+    result = RegQueryValueExA(hKey, "InstallPath", NULL, &type, NULL, &size);
     
     if (result != ERROR_SUCCESS) {
         RegCloseKey(hKey);
@@ -105,7 +105,7 @@ std::string GetInstallPathFromRegistry() {
     
     // 读取值
     std::vector<char> buffer(size);
-    result = RegQueryValueExA(hKey, "GradeTrackerPath", NULL, &type, 
+    result = RegQueryValueExA(hKey, "InstallPath", NULL, &type, 
                               reinterpret_cast<LPBYTE>(&buffer[0]), &size);
     
     RegCloseKey(hKey);
@@ -400,7 +400,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             nid.uID = 1;
             nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
             nid.uCallbackMessage = WM_TRAYICON;
-            wcscpy_s(nid.szTip, L"学业助手");
+            wcscpy_s(nid.szTip, L"Capture_Push");
             nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
             Shell_NotifyIcon(NIM_ADD, &nid);
             
@@ -521,11 +521,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     InitLogging();
     LogMessage("Application starting...");
 
-    HANDLE hMutex = CreateMutexW(NULL, TRUE, L"GradeTrackerTrayAppMutex");
+    HANDLE hMutex = CreateMutexW(NULL, TRUE, L"Capture_PushTrayAppMutex");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         LogMessage("Another instance is already running. Exiting.");
         MessageBoxW(NULL, 
-                    L"学业助手托盘程序已经在运行中！\n如果看不到托盘图标，请检查任务管理器。",
+                    L"Capture_Push 托盘程序已经在运行中！\n如果看不到托盘图标，请检查任务管理器。",
                     L"提示",
                     MB_OK | MB_ICONINFORMATION);
         if (hMutex) CloseHandle(hMutex);
@@ -540,7 +540,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.lpszClassName = CLASS_NAME;
     RegisterClassW(&wc);
     
-    hwnd = CreateWindowExW(0, CLASS_NAME, L"学业助手托盘程序",
+    hwnd = CreateWindowExW(0, CLASS_NAME, L"Capture_Push 托盘程序",
                            0, 0, 0, 0, 0, NULL, NULL, hInstance, NULL);
     
     MSG msg = {};

@@ -20,7 +20,7 @@ def generate_install_config(install_dir):
     config_file = Path(install_dir) / "install_config.txt"
     
     config_content = f"""========================================
-学业助手 - 安装配置信息
+Capture_Push - 安装配置信息
 ========================================
 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
@@ -33,13 +33,13 @@ Python脚本: {install_dir}\\core
 
 [注册表项]
 程序路径注册:
-  位置: HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment
-  键名: GradeTrackerPath
+  位置: HKLM\\SOFTWARE\\Capture_Push
+  键名: InstallPath
   键值: {install_dir}
 
 自启动托盘程序:
   位置: HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
-  键名: GradeTrackerTray
+  键名: Capture_Push_Tray
   键值: {install_dir}\TrayApp.exe
 
 [虚拟环境]
@@ -59,8 +59,8 @@ Pip: {install_dir}\\.venv\\Scripts\\pip.exe
 1. 运行卸载程序: {install_dir}\\unins000.exe
 2. 或手动删除整个安装目录
 3. 清理注册表项（可选）:
-   - 删除 HKLM\...\Environment\GradeTrackerPath
-   - 删除 HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\GradeTrackerTray
+   - 删除 HKLM\SOFTWARE\Capture_Push
+   - 删除 HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\Capture_Push_Tray
 
 ========================================
 注意事项

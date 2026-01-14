@@ -34,21 +34,16 @@ def get_project_root():
     return os.path.dirname(script_dir)
 
 def write_registry(value_data):
-    """写入 GradeTrackerPath 到注册表"""
+    """写入 InstallPath 到注册表"""
     try:
-        key = winreg.OpenKey(
-            winreg.HKEY_LOCAL_MACHINE,
-            r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
-            0,
-            winreg.KEY_SET_VALUE
-        )
-        winreg.SetValueEx(key, "GradeTrackerPath", 0, winreg.REG_EXPAND_SZ, value_data)
+        # 打开/创建 HKLM\SOFTWARE\Capture_Push
+        key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Capture_Push")
+        winreg.SetValueEx(key, "InstallPath", 0, winreg.REG_SZ, value_data)
         winreg.CloseKey(key)
         print(f"\n✅ 成功注册路径到注册表！")
-        print(f"   键名: GradeTrackerPath")
+        print(f"   键名: InstallPath")
         print(f"   路径: {value_data}")
     except PermissionError:
-        # 理论上不会触发，因为已提前提权
         print("\n❌ 权限不足！请以管理员身份运行此脚本。")
         sys.exit(1)
     except Exception as e:
@@ -56,21 +51,13 @@ def write_registry(value_data):
         sys.exit(1)
 
 def delete_registry():
-    """从注册表删除 GradeTrackerPath"""
+    """从注册表删除 Capture_Push 键"""
     try:
-        key = winreg.OpenKey(
-            winreg.HKEY_LOCAL_MACHINE,
-            r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
-            0,
-            winreg.KEY_SET_VALUE
-        )
-        try:
-            winreg.DeleteValue(key, "GradeTrackerPath")
-            print("\n✅ 成功撤回注册表项！GradeTrackerPath 已删除。")
-        except FileNotFoundError:
-            print("\nℹ️  注册表中未找到 GradeTrackerPath，无需撤回。")
-        finally:
-            winreg.CloseKey(key)
+        # 尝试删除 HKLM\SOFTWARE\Capture_Push 及其子项
+        winreg.DeleteKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Capture_Push")
+        print("\n✅ 成功撤回注册表项！Capture_Push 键已删除。")
+    except FileNotFoundError:
+        print("\nℹ️  注册表中未找到 Capture_Push 键，无需撤回。")
     except PermissionError:
         print("\n❌ 权限不足！请以管理员身份运行此脚本。")
         sys.exit(1)
@@ -80,7 +67,7 @@ def delete_registry():
 
 def ask_user_choice():
     """向用户提问并返回选择：'register' 或 'undo'"""
-    print("🔧 GradeTracker 路径注册工具")
+    print("🔧 Capture_Push 路径注册工具")
     print("此操作将修改系统环境变量（需管理员权限）。\n")
     
     while True:
@@ -108,7 +95,7 @@ def main():
         else:
             print("操作已取消。")
     elif action == "undo":
-        confirm = input("\n确认撤回 GradeTrackerPath 注册项？(y/n): ").strip().lower()
+        confirm = input("\n确认撤回 Capture_Push 注册项？(y/n): ").strip().lower()
         if confirm in ("y", "yes"):
             delete_registry()
         else:

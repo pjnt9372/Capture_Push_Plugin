@@ -29,7 +29,7 @@ def get_config_path():
     if not localappdata:
         raise RuntimeError("无法获取 LOCALAPPDATA 环境变量")
     
-    config_path = Path(localappdata) / 'GradeTracker' / 'config.ini'
+    config_path = Path(localappdata) / 'Capture_Push' / 'config.ini'
     
     # 配置文件必须存在
     if not config_path.exists():
@@ -55,7 +55,7 @@ def get_log_file_path(module_name):
     if not localappdata:
         raise RuntimeError("无法获取 LOCALAPPDATA 环境变量")
     
-    appdata_dir = Path(localappdata) / 'GradeTracker'
+    appdata_dir = Path(localappdata) / 'Capture_Push'
     
     # 确保目录存在
     appdata_dir.mkdir(parents=True, exist_ok=True)

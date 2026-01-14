@@ -7,15 +7,15 @@ if not local_appdata:
     raise EnvironmentError("无法获取 LOCALAPPDATA 环境变量，此脚本仅支持 Windows。")
 
 # 构建目标文件夹和配置文件路径
-grade_tracker_dir = Path(local_appdata) / "GradeTracker"
-config_file = grade_tracker_dir / "config.ini"
+capture_push_dir = Path(local_appdata) / "Capture_Push"
+config_file = capture_push_dir / "config.ini"
 
 # 如果文件夹不存在，则创建
-if not grade_tracker_dir.exists():
-    print(f"📁 创建文件夹: {grade_tracker_dir}")
-    grade_tracker_dir.mkdir(parents=True, exist_ok=True)
+if not capture_push_dir.exists():
+    print(f"📁 创建文件夹: {capture_push_dir}")
+    capture_push_dir.mkdir(parents=True, exist_ok=True)
 else:
-    print(f"✅ 文件夹已存在: {grade_tracker_dir}")
+    print(f"✅ 文件夹已存在: {capture_push_dir}")
 
 # 从项目根目录复制配置文件模板
 import configparser
@@ -48,5 +48,5 @@ print(f"📝 写入配置文件: {config_file}")
 with open(config_file, 'w', encoding='utf-8') as f:
     config.write(f)
 
-print("✅ GradeTracker 配置文件初始化完成！")
+print("✅ Capture_Push 配置文件初始化完成！")
 print("💡 请手动编辑 config.ini，填写 username、password 和邮箱认证信息。")

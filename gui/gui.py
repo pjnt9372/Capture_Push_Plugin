@@ -23,7 +23,7 @@ CONFIG_FILE = str(get_config_path())
 class ConfigWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("学业助手 · 设置")
+        self.setWindowTitle("Capture_Push · 设置")
         self.resize(450, 600)
 
         self.cfg = configparser.ConfigParser()
@@ -222,7 +222,7 @@ class ConfigWindow(QWidget):
             manager = push.NotificationManager()
             success = manager.send_with_active_sender(
                 "测试推送",
-                "这是一条来自学业助手的测试推送消息。\n\n如果您收到此消息，说明推送配置正确！"
+                "这是一条来自 Capture_Push 的测试推送消息。\n\n如果您收到此消息，说明推送配置正确！"
             )
             
             if success:
