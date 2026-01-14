@@ -1,115 +1,74 @@
 # -*- coding: utf-8 -*-
-import smtplib
+"""
+消息推送模块
+负责消息的格式化封装和发送调度，不包含具体的发送实现
+具体的发送实现在 senders 目录下
+"""
 import configparser
-import sys
-from pathlib import Path
-from email.mime.text import MIMEText
-from email.header import Header
-from email.mime.multipart import MIMEMultipart
 from abc import ABC, abstractmethod
 
-# 导入统一日志模块（AppData 目录）
+# 导入统一日志模块
 try:
-    # 优先尝试相对导入（从 core 目录内运行）
     from log import init_logger, get_config_path
 except ImportError:
-    # 回退到绝对导入（从项目根目录运行）
     from core.log import init_logger, get_config_path
 
-# 初始化日志（如果失败直接崩溃）
+# 导入具体的发送器实现
+try:
+    from senders.email_sender import EmailSender
+except ImportError:
+    from core.senders.email_sender import EmailSender
+
+# 初始化日志
 logger = init_logger('push')
 
-# 获取配置文件路径（AppData 目录，如果失败直接崩溃）
-CONFIG_PATH = get_config_path()
+
+def get_push_method():
+    """
+    从配置文件读取当前启用的推送方式
+    
+    Returns:
+        str: 推送方式名称，默认为 'none'
+    """
+    try:
+        config_path = get_config_path()
+        cfg = configparser.ConfigParser()
+        cfg.read(str(config_path), encoding='utf-8')
+        method = cfg.get('push', 'method', fallback='none').strip().lower()
+        logger.debug(f"读取推送配置: method={method}")
+        return method
+    except Exception as e:
+        logger.error(f"读取推送配置失败: {e}，使用默认值 'none'")
+        return 'none'
 
 
-def load_mail_cfg():
-    """加载邮件配置"""
-    cfg = configparser.ConfigParser()
-    logger.info(f"加载配置文件: {CONFIG_PATH}")
-    cfg.read(str(CONFIG_PATH), encoding="utf-8")
-    return cfg
+def is_push_enabled():
+    """
+    检查是否启用了任何推送方式
+    
+    Returns:
+        bool: 如果推送方式不是 'none' 则返回 True
+    """
+    method = get_push_method()
+    return method != 'none'
 
 
 class NotificationSender(ABC):
-    """通知发送器抽象基类，用于扩展各种推送方式"""
+    """通知发送器抽象基类"""
     
     @abstractmethod
     def send(self, subject, content):
+        """
+        发送通知
+        
+        Args:
+            subject: 消息主题
+            content: 消息内容
+            
+        Returns:
+            bool: 发送是否成功
+        """
         pass
-
-
-class EmailSender(NotificationSender):
-    """邮件推送实现"""
-    
-    def send(self, subject, html):
-        logger.info(f"开始发送邮件: {subject}")
-        cfg = load_mail_cfg()
-        smtp = cfg.get("email", "smtp")
-        port = cfg.getint("email", "port")
-        sender = cfg.get("email", "sender")
-        receiver = cfg.get("email", "receiver")
-        auth = cfg.get("email", "auth")
-        
-        logger.debug(f"SMTP服务器: {smtp}:{port}, 发件人: {sender}, 收件人: {receiver}")
-        
-        # 验证配置是否为空
-        if not all([smtp, port, sender, receiver, auth]):
-            logger.error(f"邮件配置验证失败: smtp='{smtp}', port='{port}', sender='{sender}', receiver='{receiver}', auth='{'*' * len(auth) if auth else ''}'")
-            print(f"❌ 邮件配置验证失败，请检查配置文件")
-            return False
-
-        msg = MIMEMultipart()
-        msg["From"] = sender
-        msg["To"] = receiver
-        msg["Subject"] = Header(subject, "utf-8")
-
-        msg.attach(MIMEText(html, "html", "utf-8"))
-        
-        logger.debug(f"邮件消息构建完成，HTML长度: {len(html)}")
-
-        try:
-            logger.debug(f"连接到 SMTP 服务器: {smtp}:{port}")
-            
-            # 根据端口选择连接方式
-            if port == 465:
-                # 端口 465 使用 SMTP_SSL（隐式 SSL）
-                logger.debug("使用 SMTP_SSL 连接（端口 465）")
-                server = smtplib.SMTP_SSL(smtp, port)
-            else:
-                # 端口 587 或其他端口使用 SMTP + starttls（显式 TLS）
-                logger.debug(f"使用 SMTP + starttls 连接（端口 {port}）")
-                server = smtplib.SMTP(smtp, port)
-                logger.debug("开始 TLS 加密...")
-                server.starttls()
-            
-            logger.debug("正在登录...")
-            server.login(sender, auth)
-            logger.debug("正在发送邮件...")
-            logger.debug(f"收件人列表: {[receiver]}")
-            logger.debug(f"邮件内容: {msg.as_string()[:500]}...")
-            server.sendmail(sender, [receiver], msg.as_string())
-            server.quit()
-            logger.info(f"✅ 邮件发送成功: {subject}")
-            print(f"✅ 邮件发送成功: {subject}")
-            return True
-        except smtplib.SMTPAuthenticationError as e:
-            logger.error(f"❌ SMTP 认证失败: {e}", exc_info=True)
-            # 检查是否是 Office365 常见问题
-            error_msg = str(e.args[1])
-            if "basic authentication is disabled" in error_msg.lower():
-                print("❌ 认证失败: Office365 已禁用基本认证")
-                print("💡 解决方案: 请使用应用密码而非账户密码")
-                print("   1. 为您的账户启用两步验证")
-                print("   2. 创建应用密码")
-                print("   3. 在配置文件中使用应用密码")
-            else:
-                print(f"❌ SMTP 认证失败: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"❌ 邮件发送失败: {e}", exc_info=True)
-            print(f"❌ 邮件发送失败: {e}")
-            return False
 
 
 class NotificationManager:
@@ -117,9 +76,24 @@ class NotificationManager:
     
     def __init__(self):
         self.senders = {}
-        # 默认注册邮件推送
         logger.info("初始化通知管理器")
-        self.register_sender("email", EmailSender())
+        # 自动注册所有可用的发送器
+        self._register_available_senders()
+    
+    def _register_available_senders(self):
+        """注册所有可用的发送器"""
+        # 注册邮件推送
+        try:
+            self.register_sender("email", EmailSender())
+        except Exception as e:
+            logger.warning(f"注册邮件发送器失败: {e}")
+        
+        # 未来可以在这里注册其他发送器
+        # try:
+        #     from senders.wechat_sender import WeChatSender
+        #     self.register_sender("wechat", WeChatSender())
+        # except ImportError:
+        #     logger.debug("微信发送器未安装")
     
     def register_sender(self, name, sender):
         """注册新的推送方式"""
@@ -130,6 +104,26 @@ class NotificationManager:
         """获取指定推送方式"""
         return self.senders.get(name)
     
+    def get_active_sender(self):
+        """
+        根据配置获取当前活跃的发送器
+        
+        Returns:
+            tuple: (sender_name, sender_instance) 或 (None, None)
+        """
+        method = get_push_method()
+        if method == 'none':
+            logger.debug("推送方式为 'none'，未启用推送")
+            return None, None
+        
+        sender = self.get_sender(method)
+        if sender:
+            logger.debug(f"使用推送方式: {method}")
+            return method, sender
+        else:
+            logger.error(f"配置的推送方式 '{method}' 未注册或不可用")
+            return None, None
+    
     def send_notification(self, sender_name, subject, content):
         """发送通知"""
         logger.info(f"使用 {sender_name} 发送通知: {subject}")
@@ -137,8 +131,27 @@ class NotificationManager:
         if sender:
             return sender.send(subject, content)
         else:
-            logger.error(f"❌ 未找到名为 {sender_name} 的推送方式")
-            print(f"❌ 未找到名为 {sender_name} 的推送方式")
+            logger.error(f"❗ 未找到名为 {sender_name} 的推送方式")
+            print(f"❗ 未找到名为 {sender_name} 的推送方式")
+            return False
+    
+    def send_with_active_sender(self, subject, content):
+        """
+        使用当前配置的活跃发送器发送通知
+        
+        Args:
+            subject: 消息主题
+            content: 消息内容
+            
+        Returns:
+            bool: 发送是否成功
+        """
+        sender_name, sender = self.get_active_sender()
+        if sender:
+            logger.info(f"使用活跃发送器 '{sender_name}' 发送: {subject}")
+            return sender.send(subject, content)
+        else:
+            logger.debug(f"未启用推送，跳过发送: {subject}")
             return False
     
     def get_available_senders(self):
@@ -151,14 +164,36 @@ notification_manager = NotificationManager()
 
 
 def send_notification(sender_name, subject, content):
-    """通用通知发送函数"""
+    """
+    通用通知发送函数
+    
+    Args:
+        sender_name: 发送器名称（如 'email'）
+        subject: 消息主题
+        content: 消息内容（HTML格式）
+        
+    Returns:
+        bool: 发送是否成功
+    """
     logger.debug(f"调用 send_notification: sender={sender_name}, subject={subject}")
     return notification_manager.send_notification(sender_name, subject, content)
 
 
-def send_grade_mail(changed):
-    logger.info(f"准备发送成绩更新邮件，变化数: {len(changed)}")
+# ==================== 消息格式化函数 ====================
+
+def format_grade_changes(changed):
+    """
+    格式化成绩变化消息
+    
+    Args:
+        changed: 字典，key为课程名称，value为变化描述
+        
+    Returns:
+        str: HTML格式的消息内容
+    """
+    logger.info(f"格式化成绩变化消息，变化数: {len(changed)}")
     logger.debug(f"变化详情: {changed}")
+    
     rows = "".join(
         f"<tr><td>{k}</td><td>{v}</td></tr>"
         for k, v in changed.items()
@@ -171,13 +206,22 @@ def send_grade_mail(changed):
     </table>
     """
     logger.debug(f"HTML内容预览: {html[:200]}...")
-    send_notification("email", "成绩有更新", html)
+    return html
 
 
-def send_all_grades(grades):
-    """发送全部成绩"""
-    logger.info(f"准备发送全部成绩，课程数: {len(grades)}")
+def format_all_grades(grades):
+    """
+    格式化全部成绩消息
+    
+    Args:
+        grades: 成绩列表，每项包含课程名称、成绩、学分、课程属性、学期
+        
+    Returns:
+        str: HTML格式的消息内容
+    """
+    logger.info(f"格式化全部成绩消息，课程数: {len(grades)}")
     logger.debug(f"成绩详情: {[{'课程名称': g['课程名称'], '成绩': g['成绩'], '学分': g['学分'], '课程属性': g['课程属性']} for g in grades[:3]]}... (显示前3条)")
+    
     rows = "".join(
         f"<tr><td>{g['课程名称']}</td><td>{g['成绩']}</td><td>{g['学分']}</td><td>{g['课程属性']}</td><td>{g['学期']}</td></tr>"
         for g in grades
@@ -190,50 +234,54 @@ def send_all_grades(grades):
     </table>
     """
     logger.debug(f"HTML内容预览: {html[:200]}...")
-    send_notification("email", "全部成绩", html)
+    return html
 
 
-def send_schedule_mail(courses, week, weekday):
-    logger.info(f"准备发送课表邮件，第{week}周 周{weekday}，课程数: {len(courses)}")
+def format_schedule(courses, week, weekday, title="课表"):
+    """
+    格式化课表消息
+    
+    Args:
+        courses: 课程列表，每项包含课程名称、开始小节、结束小节、教室
+        week: 周数
+        weekday: 星期几
+        title: 标题前缀
+        
+    Returns:
+        str: HTML格式的消息内容
+    """
+    logger.info(f"格式化课表消息，第{week}周 周{weekday}，课程数: {len(courses)}")
     logger.debug(f"课程详情: {[{'课程名称': c['课程名称'], '开始小节': c['开始小节'], '结束小节': c['结束小节'], '教室': c['教室']} for c in courses]}")
+    
     rows = "".join(
         f"<tr><td>{c['课程名称']}</td><td>{c['开始小节']}-{c['结束小节']}</td><td>{c['教室']}</td></tr>"
         for c in courses
     )
     html = f"""
-    <h3>📚 第 {week} 周 · 周{weekday} 课表</h3>
+    <h3>📚 第 {week} 周 · {title}（周{weekday}）</h3>
     <table border="1" cellspacing="0" cellpadding="6">
       <tr><th>课程</th><th>节次</th><th>教室</th></tr>
       {rows}
     </table>
     """
     logger.debug(f"HTML内容预览: {html[:200]}...")
-    send_notification("email", "明日课表提醒", html)
+    return html
 
 
-def send_today_schedule(courses, week, weekday):
-    """发送当天课表"""
-    logger.info(f"准备发送今日课表，第{week}周 周{weekday}，课程数: {len(courses)}")
-    logger.debug(f"课程详情: {[{'课程名称': c['课程名称'], '开始小节': c['开始小节'], '结束小节': c['结束小节'], '教室': c['教室']} for c in courses]}")
-    rows = "".join(
-        f"<tr><td>{c['课程名称']}</td><td>{c['开始小节']}-{c['结束小节']}</td><td>{c['教室']}</td></tr>"
-        for c in courses
-    )
-    html = f"""
-    <h3>📅 第 {week} 周 · 今日课表（周{weekday}）</h3>
-    <table border="1" cellspacing="0" cellpadding="6">
-      <tr><th>课程</th><th>节次</th><th>教室</th></tr>
-      {rows}
-    </table>
+def format_full_schedule(courses, week_count):
     """
-    logger.debug(f"HTML内容预览: {html[:200]}...")
-    send_notification("email", "今日课表", html)
-
-
-def send_full_schedule(courses, week_count):
-    """发送本学期全部课表"""
-    logger.info(f"准备发送全部课表，总周数: {week_count}")
+    格式化完整学期课表消息
+    
+    Args:
+        courses: 课程列表（按天分组）
+        week_count: 总周数
+        
+    Returns:
+        str: HTML格式的消息内容
+    """
+    logger.info(f"格式化完整课表消息，总周数: {week_count}")
     logger.debug(f"课程总数: {sum(len(day_courses) for day_courses in courses) if courses else 0}")
+    
     rows = []
     for day_courses in courses:
         for course in day_courses:
@@ -247,4 +295,36 @@ def send_full_schedule(courses, week_count):
     </table>
     """
     logger.debug(f"HTML内容预览: {html[:200]}...")
-    send_notification("email", "本学期完整课表", html)
+    return html
+
+
+# ==================== 便捷发送函数（邮件） ====================
+
+def send_grade_mail(changed):
+    """发送成绩变化邮件（使用配置的推送方式）"""
+    html = format_grade_changes(changed)
+    return notification_manager.send_with_active_sender("成绩有更新", html)
+
+
+def send_all_grades_mail(grades):
+    """发送全部成绩邮件（使用配置的推送方式）"""
+    html = format_all_grades(grades)
+    return notification_manager.send_with_active_sender("全部成绩", html)
+
+
+def send_schedule_mail(courses, week, weekday):
+    """发送明日课表邮件（使用配置的推送方式）"""
+    html = format_schedule(courses, week, weekday, "明日课表")
+    return notification_manager.send_with_active_sender("明日课表提醒", html)
+
+
+def send_today_schedule_mail(courses, week, weekday):
+    """发送今日课表邮件（使用配置的推送方式）"""
+    html = format_schedule(courses, week, weekday, "今日课表")
+    return notification_manager.send_with_active_sender("今日课表", html)
+
+
+def send_full_schedule_mail(courses, week_count):
+    """发送完整学期课表邮件（使用配置的推送方式）"""
+    html = format_full_schedule(courses, week_count)
+    return notification_manager.send_with_active_sender("本学期完整课表", html)

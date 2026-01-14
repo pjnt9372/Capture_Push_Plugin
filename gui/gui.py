@@ -5,7 +5,8 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel,
     QLineEdit, QPushButton, QFormLayout, QMessageBox,
-    QCheckBox, QSpinBox, QHBoxLayout, QGroupBox
+    QCheckBox, QSpinBox, QHBoxLayout, QGroupBox, QRadioButton,
+    QButtonGroup, QTabWidget
 )
 
 # 添加父目录到 sys.path（确保能找到 core 模块）
@@ -33,6 +34,31 @@ class ConfigWindow(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout()
+
+        # 创建标签页控件
+        self.tabs = QTabWidget()
+        
+        # 创建各个页面
+        self.basic_tab = self.create_basic_tab()
+        self.push_tab = self.create_push_tab()
+        
+        # 添加标签页
+        self.tabs.addTab(self.basic_tab, "基本配置")
+        self.tabs.addTab(self.push_tab, "推送设置")
+        
+        layout.addWidget(self.tabs)
+
+        # 保存按钮
+        self.save_btn = QPushButton("保存配置")
+        self.save_btn.clicked.connect(self.save_config)
+        layout.addWidget(self.save_btn)
+        
+        self.setLayout(layout)
+
+    def create_basic_tab(self):
+        """创建基本配置页面"""
+        tab = QWidget()
+        layout = QVBoxLayout()
         form = QFormLayout()
 
         # 账号配置
@@ -40,24 +66,11 @@ class ConfigWindow(QWidget):
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.Password)
 
-        # 邮箱配置
-        self.smtp = QLineEdit()
-        self.port = QLineEdit()
-        self.sender = QLineEdit()
-        self.receiver = QLineEdit()
-        self.auth = QLineEdit()
-        self.auth.setEchoMode(QLineEdit.Password)
-
         # 学期配置
         self.first_monday = QLineEdit()
 
         form.addRow("学号", self.username)
         form.addRow("密码", self.password)
-        form.addRow("SMTP", self.smtp)
-        form.addRow("端口", self.port)
-        form.addRow("发件邮箱", self.sender)
-        form.addRow("收件邮箱", self.receiver)
-        form.addRow("邮箱授权码", self.auth)
         form.addRow("第一周周一 (YYYY-MM-DD)", self.first_monday)
 
         layout.addLayout(form)
@@ -110,13 +123,155 @@ class ConfigWindow(QWidget):
 
         loop_group.setLayout(loop_layout)
         layout.addWidget(loop_group)
+        
+        layout.addStretch()
+        tab.setLayout(layout)
+        return tab
 
-        # 保存按钮
-        self.save_btn = QPushButton("保存配置")
-        self.save_btn.clicked.connect(self.save_config)
+    def create_push_tab(self):
+        """创建推送设置页面"""
+        tab = QWidget()
+        layout = QVBoxLayout()
 
-        layout.addWidget(self.save_btn)
-        self.setLayout(layout)
+        # 推送方式配置区域
+        push_group = QGroupBox("推送方式配置")
+        push_layout = QVBoxLayout()
+
+        # 创建互斥的单选按钮组
+        self.push_button_group = QButtonGroup()
+        
+        # 不启用推送
+        self.push_none_radio = QRadioButton("不启用推送")
+        self.push_button_group.addButton(self.push_none_radio, 0)
+        push_layout.addWidget(self.push_none_radio)
+        
+        # 邮件推送
+        self.push_email_radio = QRadioButton("邮件推送")
+        self.push_button_group.addButton(self.push_email_radio, 1)
+        push_layout.addWidget(self.push_email_radio)
+        
+        # TEST1 推送方式（未来可扩展的推送方式示例）
+        self.push_test1_radio = QRadioButton("TEST1推送")
+        self.push_button_group.addButton(self.push_test1_radio, 2)
+        push_layout.addWidget(self.push_test1_radio)
+        
+        # 未来可扩展的推送方式（先注释）
+        # self.push_wechat_radio = QRadioButton("微信推送")
+        # self.push_button_group.addButton(self.push_wechat_radio, 3)
+        # push_layout.addWidget(self.push_wechat_radio)
+        
+        # self.push_dingtalk_radio = QRadioButton("钉钉推送")
+        # self.push_button_group.addButton(self.push_dingtalk_radio, 4)
+        # push_layout.addWidget(self.push_dingtalk_radio)
+
+        # 添加提示信息
+        push_hint = QLabel(
+            "提示: 只能同时启用一种推送方式。"
+        )
+        push_hint.setStyleSheet("color: gray; font-size: 10px;")
+        push_layout.addWidget(push_hint)
+
+        push_group.setLayout(push_layout)
+        layout.addWidget(push_group)
+
+        # 邮件配置区域
+        email_group = QGroupBox("邮件推送配置")
+        email_form = QFormLayout()
+        
+        self.smtp = QLineEdit()
+        self.port = QLineEdit()
+        self.sender = QLineEdit()
+        self.receiver = QLineEdit()
+        self.auth = QLineEdit()
+        self.auth.setEchoMode(QLineEdit.Password)
+        
+        email_form.addRow("SMTP服务器", self.smtp)
+        email_form.addRow("端口", self.port)
+        email_form.addRow("发件邮箱", self.sender)
+        email_form.addRow("收件邮箱", self.receiver)
+        email_form.addRow("邮箱授权码", self.auth)
+        
+        email_group.setLayout(email_form)
+        layout.addWidget(email_group)
+
+        # TEST1 推送配置区域
+        test1_group = QGroupBox("TEST1推送配置")
+        test1_form = QFormLayout()
+        
+        self.test1_param1 = QLineEdit()
+        self.test1_param2 = QLineEdit()
+        self.test1_param3 = QLineEdit()
+        self.test1_param3.setEchoMode(QLineEdit.Password)
+        
+        test1_form.addRow("参数1", self.test1_param1)
+        test1_form.addRow("参数2", self.test1_param2)
+        test1_form.addRow("密钥/Token", self.test1_param3)
+        
+        # 添加测试按钮
+        test1_test_layout = QHBoxLayout()
+        test1_test_btn = QPushButton("发送测试推送")
+        test1_test_btn.clicked.connect(self.send_test_push)
+        test1_test_layout.addWidget(test1_test_btn)
+        
+        self.test1_status = QLabel("状态: 就绪")
+        self.test1_status.setStyleSheet("color: gray;")
+        test1_test_layout.addWidget(self.test1_status)
+        test1_test_layout.addStretch()
+        
+        test1_layout_full = QVBoxLayout()
+        test1_layout_full.addLayout(test1_form)
+        test1_layout_full.addLayout(test1_test_layout)
+        
+        test1_hint = QLabel(
+            "提示: TEST1 是预留的推送方式接口，可用于测试新的推送实现。"
+        )
+        test1_hint.setStyleSheet("color: gray; font-size: 10px;")
+        test1_layout_full.addWidget(test1_hint)
+        
+        test1_group.setLayout(test1_layout_full)
+        layout.addWidget(test1_group)
+        
+        layout.addStretch()
+        tab.setLayout(layout)
+        return tab
+
+    def send_test_push(self):
+        """发送测试推送"""
+        try:
+            self.test1_status.setText("状态: 正在发送测试推送...")
+            self.test1_status.setStyleSheet("color: blue;")
+            QApplication.processEvents()  # 更新UI
+            
+            # 导入推送模块
+            from core import push
+            
+            # 检查推送是否启用
+            if not push.is_push_enabled():
+                self.test1_status.setText("状态: 推送未启用")
+                self.test1_status.setStyleSheet("color: orange;")
+                QMessageBox.warning(self, "测试失败", "请先启用一种推送方式")
+                return
+            
+            # 发送测试消息
+            manager = push.NotificationManager()
+            success = manager.send_with_active_sender(
+                "测试推送",
+                "这是一条来自学业助手的测试推送消息。\n\n如果您收到此消息，说明推送配置正确！"
+            )
+            
+            if success:
+                self.test1_status.setText("状态: 测试推送发送成功")
+                self.test1_status.setStyleSheet("color: green;")
+                QMessageBox.information(self, "测试成功", "测试推送已发送，请检查接收端")
+            else:
+                self.test1_status.setText("状态: 测试推送发送失败")
+                self.test1_status.setStyleSheet("color: red;")
+                QMessageBox.warning(self, "测试失败", "推送发送失败，请检查配置和日志")
+                
+        except Exception as e:
+            self.test1_status.setText(f"状态: 发生错误")
+            self.test1_status.setStyleSheet("color: red;")
+            QMessageBox.critical(self, "错误", f"测试推送时发生错误:\n{str(e)}")
 
     def load_config(self):
         # 加载账号配置
@@ -151,6 +306,28 @@ class ConfigWindow(QWidget):
             self.cfg.getint("loop_getCourseSchedule", "time", fallback=604800)
         )
 
+        # 加载推送方式配置
+        push_method = self.cfg.get("push", "method", fallback="none").strip().lower()
+        if push_method == "none":
+            self.push_none_radio.setChecked(True)
+        elif push_method == "email":
+            self.push_email_radio.setChecked(True)
+        elif push_method == "test1":
+            self.push_test1_radio.setChecked(True)
+        # 未来可扩展其他推送方式的加载
+        # elif push_method == "wechat":
+        #     self.push_wechat_radio.setChecked(True)
+        # elif push_method == "dingtalk":
+        #     self.push_dingtalk_radio.setChecked(True)
+        else:
+            # 默认不启用
+            self.push_none_radio.setChecked(True)
+
+        # 加载 TEST1 配置
+        self.test1_param1.setText(self.cfg.get("test1", "param1", fallback=""))
+        self.test1_param2.setText(self.cfg.get("test1", "param2", fallback=""))
+        self.test1_param3.setText(self.cfg.get("test1", "param3", fallback=""))
+
     def save_config(self):
         # 保存账号配置
         if "account" not in self.cfg:
@@ -183,6 +360,41 @@ class ConfigWindow(QWidget):
             self.cfg["loop_getCourseSchedule"] = {}
         self.cfg["loop_getCourseSchedule"]["enabled"] = str(self.loop_schedule_enabled.isChecked())
         self.cfg["loop_getCourseSchedule"]["time"] = str(self.loop_schedule_interval.value())
+
+        # 保存推送方式配置
+        if "push" not in self.cfg:
+            self.cfg["push"] = {}
+        
+        # 根据选中的单选按钮保存推送方式
+        if self.push_none_radio.isChecked():
+            self.cfg["push"]["method"] = "none"
+        elif self.push_email_radio.isChecked():
+            self.cfg["push"]["method"] = "email"
+        elif self.push_test1_radio.isChecked():
+            self.cfg["push"]["method"] = "test1"
+        # 未来可扩展其他推送方式的保存
+        # elif self.push_wechat_radio.isChecked():
+        #     self.cfg["push"]["method"] = "wechat"
+        # elif self.push_dingtalk_radio.isChecked():
+        #     self.cfg["push"]["method"] = "dingtalk"
+        else:
+            self.cfg["push"]["method"] = "none"
+
+        # 保存邮件配置
+        if "email" not in self.cfg:
+            self.cfg["email"] = {}
+        self.cfg["email"]["smtp"] = self.smtp.text()
+        self.cfg["email"]["port"] = self.port.text()
+        self.cfg["email"]["sender"] = self.sender.text()
+        self.cfg["email"]["receiver"] = self.receiver.text()
+        self.cfg["email"]["auth"] = self.auth.text()
+
+        # 保存 TEST1 配置
+        if "test1" not in self.cfg:
+            self.cfg["test1"] = {}
+        self.cfg["test1"]["param1"] = self.test1_param1.text()
+        self.cfg["test1"]["param2"] = self.test1_param2.text()
+        self.cfg["test1"]["param3"] = self.test1_param3.text()
 
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             self.cfg.write(f)
