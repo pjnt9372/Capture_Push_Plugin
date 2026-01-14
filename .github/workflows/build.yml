@@ -72,7 +72,7 @@ jobs:
       - name: Extract Version from ISS
         shell: powershell
         run: |
-          $issContent = Get-Content "GradeTracker_Setup.iss" -Raw
+          $issContent = Get-Content "Capture_Push_Setup.iss" -Raw
           $versionMatch = [regex]::Match($issContent, 'AppVersion=(.*)')
           if ($versionMatch.Success) {
             $version = $versionMatch.Groups[1].Value.Trim()
