@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      PYTHONUTF8: 1
 
     steps:
       - name: Checkout repository
@@ -41,14 +43,7 @@ jobs:
       - name: Setup Inno Setup Chinese Support
         run: |
           curl -L -o ChineseSimplified.isl https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseSimplified.isl
-          # Check if Inno Setup is in the expected path and copy the language file
-          $innoPath = "C:\Program Files (x86)\Inno Setup 6\Languages"
-          if (Test-Path $innoPath) {
-            Copy-Item "ChineseSimplified.isl" "$innoPath\ChineseSimplified.isl"
-            echo "ChineseSimplified.isl copied to $innoPath"
-          } else {
-            echo "Inno Setup languages path not found, will use local file"
-          }
+          echo "ChineseSimplified.isl downloaded to root"
 
       - name: Build Installer with Inno Setup
         run: |

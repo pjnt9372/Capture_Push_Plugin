@@ -7,6 +7,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+# 强制设置 stdout 为 UTF-8 以避免在 Windows CI 环境下出现编码错误
+if sys.platform.startswith('win'):
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 def main():
     print("=" * 60)
     print("打包 installer.py 为独立可执行文件")

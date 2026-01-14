@@ -9,6 +9,12 @@ import os
 from pathlib import Path
 from datetime import datetime
 
+# 强制设置 stdout 为 UTF-8 以避免在 Windows CI 环境下出现编码错误
+if sys.platform.startswith('win'):
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 def generate_install_config(install_dir):
     """生成安装配置文件"""
     config_file = Path(install_dir) / "install_config.txt"

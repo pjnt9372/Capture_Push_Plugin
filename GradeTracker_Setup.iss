@@ -18,7 +18,7 @@ SetupIconFile=
 UninstallDisplayIcon={app}\TrayApp.exe
 
 [Languages]
-Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinesesimp"; MessagesFile: "ChineseSimplified.isl"
 
 [Files]
 ; 环境安装器（PyInstaller 打包的独立 exe）- 使用低压缩级别避免内存溢出
