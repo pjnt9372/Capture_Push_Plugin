@@ -1,10 +1,6 @@
 name: Build and Release
 
 on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -41,9 +37,20 @@ jobs:
           cmake --build tray/build --config Release
 
       - name: Setup Inno Setup Chinese Support
+        shell: powershell
         run: |
-          curl -L -o ChineseSimplified.isl https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseSimplified.isl
-          echo "ChineseSimplified.isl downloaded to root"
+          $url = "https://raw.githubusercontent.com/jrsoftware/issrc/master/Files/Languages/ChineseSimplified.isl"
+          try {
+              Invoke-WebRequest -Uri $url -OutFile "ChineseSimplified.isl" -ErrorAction Stop
+              $firstLine = Get-Content "ChineseSimplified.isl" -TotalCount 1
+              if ($firstLine -notmatch "\[LangOptions\]") {
+                  throw "Downloaded file does not appear to be a valid .isl file (Section [LangOptions] not found at start)"
+              }
+              echo "ChineseSimplified.isl downloaded and verified successfully"
+          } catch {
+              Write-Error "Failed to download or verify ChineseSimplified.isl: $_"
+              exit 1
+          }
 
       - name: Build Installer with Inno Setup
         run: |
