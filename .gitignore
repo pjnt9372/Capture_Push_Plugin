@@ -27,3 +27,4 @@ tray/build/
 *.lib
 /build/GradeTracker_Installer/Analysis-00.toc
 /GradeTracker_Installer.spec
+/do.md
