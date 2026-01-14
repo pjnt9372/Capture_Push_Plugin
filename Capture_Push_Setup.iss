@@ -4,11 +4,7 @@
 [Setup]
 <<<<<<< HEAD:Capture_Push_Setup.iss
 AppName=Capture_Push
-AppVersion=0.1.1_DEV
-=======
-AppName=学业助手
-AppVersion=0.1.0_Beta
->>>>>>> origin/Beta:GradeTracker_Setup.iss
+AppVersion=0.1.1_Beta
 AppPublisher=pjnt9372
 DefaultDirName={autopf}\Capture_Push
 DefaultGroupName=Capture_Push
