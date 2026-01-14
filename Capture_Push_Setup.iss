@@ -2,8 +2,13 @@
 ; Capture_Push 安装脚本（内置Python环境，无需系统Python）
 
 [Setup]
+<<<<<<< HEAD:Capture_Push_Setup.iss
 AppName=Capture_Push
 AppVersion=0.1.1_DEV
+=======
+AppName=学业助手
+AppVersion=0.1.0_Beta
+>>>>>>> origin/Beta:GradeTracker_Setup.iss
 AppPublisher=pjnt9372
 DefaultDirName={autopf}\Capture_Push
 DefaultGroupName=Capture_Push
