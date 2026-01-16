@@ -3,7 +3,7 @@
 
 [Setup]
 AppName=Capture_Push
-AppVersion=0.1.1_Beta
+AppVersion=0.1.1
 AppPublisher=pjnt9372
 DefaultDirName={autopf}\Capture_Push
 DefaultGroupName=Capture_Push
@@ -48,7 +48,6 @@ Name: "{group}\配置工具"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Param
 Name: "{group}\查看配置信息"; Filename: "{app}\install_config.txt"
 Name: "{group}\卸载Capture_Push"; Filename: "{uninstallexe}"
 Name: "{commondesktop}\Capture_Push"; Filename: "{app}\TrayApp.exe"; Tasks: desktopicon
-Name: "{commonstartup}\Capture_Push"; Filename: "{app}\TrayApp.exe"; Tasks: autostart
 
 [Tasks]
 Name: desktopicon; Description: "创建桌面快捷方式"; GroupDescription: "附加选项:"
