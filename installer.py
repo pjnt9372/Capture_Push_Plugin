@@ -261,7 +261,7 @@ def main():
         print("="*60)
         print("✗ 安装失败！")
         print("="*60)
-        #sys.exit(1)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
