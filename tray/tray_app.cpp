@@ -1,6 +1,4 @@
-﻿#define UNICODE
-#define _UNICODE
-#define NOMINMAX  // 修复：防止 Windows 头文件定义 min/max 宏干扰 std::min/max
+﻿#define NOMINMAX  // 修复：防止 Windows 头文件定义 min/max 宏干扰 std::min/max
 
 #include <windows.h>
 #include <shellapi.h>
