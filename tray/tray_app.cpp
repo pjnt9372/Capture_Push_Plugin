@@ -16,6 +16,7 @@
 #include <mutex>      // for thread-safe logging
 #include <iomanip>    // for std::put_time
 #include <Shlobj.h>   // for SHGetKnownFolderPath
+#include <tlhelp32.h> // for process enumeration
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "shell32.lib")
@@ -45,6 +46,9 @@ struct LoopConfig {
     int grade_interval = 3600;
     bool schedule_enabled = false;
     int schedule_interval = 3600;
+    bool push_today_8am = false;
+    bool push_tomorrow_9pm = false;
+    bool push_next_week_sunday = false;
 };
 
 LoopConfig g_loop_config;
@@ -62,6 +66,27 @@ void EditConfigFile();
 void InitLogging();
 void CloseLogging();
 void LogMessage(const std::string& message);
+
+// 检查是否已有同名进程在运行
+bool IsProcessRunning(const wchar_t* processName) {
+    bool exists = false;
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnapshot != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W pe;
+        pe.dwSize = sizeof(PROCESSENTRY32W);
+        if (Process32FirstW(hSnapshot, &pe)) {
+            DWORD currentPid = GetCurrentProcessId();
+            do {
+                if (_wcsicmp(pe.szExeFile, processName) == 0 && pe.th32ProcessID != currentPid) {
+                    exists = true;
+                    break;
+                }
+            } while (Process32NextW(hSnapshot, &pe));
+        }
+        CloseHandle(hSnapshot);
+    }
+    return exists;
+}
 
 // 获取 %LOCALAPPDATA%\Capture_Push 路径并创建目录
 std::string GetLogDirectory() {
@@ -222,6 +247,14 @@ void ReadLoopConfig() {
                 } else if (key == "time") {
                     g_loop_config.schedule_interval = std::stoi(value);
                 }
+            } else if (current_section == "schedule_push") {
+                if (key == "today_8am") {
+                    g_loop_config.push_today_8am = (value == "True" || value == "true" || value == "1");
+                } else if (key == "tomorrow_9pm") {
+                    g_loop_config.push_tomorrow_9pm = (value == "True" || value == "true" || value == "1");
+                } else if (key == "next_week_sunday") {
+                    g_loop_config.push_next_week_sunday = (value == "True" || value == "true" || value == "1");
+                }
             }
         }
     }
@@ -232,26 +265,74 @@ void ReadLoopConfig() {
 
 // 计算最小循环间隔（毫秒）
 int GetMinLoopInterval() {
-    int min_interval = INT_MAX;
-    if (g_loop_config.grade_enabled && g_loop_config.grade_interval > 0)
-        min_interval = (std::min)(min_interval, g_loop_config.grade_interval);
-    if (g_loop_config.schedule_enabled && g_loop_config.schedule_interval > 0)
-        min_interval = (std::min)(min_interval, g_loop_config.schedule_interval);
-    if (min_interval == INT_MAX) return 0;
-    min_interval = (std::max)(60, (std::min)(min_interval, 3600));
-    return min_interval * 1000;
+    // 固定为 60 秒检查一次，因为我们要处理定时推送
+    return 60 * 1000;
+}
+
+// 定时推送检查
+void ExecuteScheduledPushCheck() {
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+    std::tm now_tm;
+#ifdef _MSC_VER
+    localtime_s(&now_tm, &now_c);
+#else
+    now_tm = *std::localtime(&now_c);
+#endif
+
+    static int last_push_today_date = -1;    // YYYYMMDD
+    static int last_push_tomorrow_date = -1; // YYYYMMDD
+    static int last_push_next_week_date = -1; // YYYYMMDD
+
+    int current_date = (now_tm.tm_year + 1900) * 10000 + (now_tm.tm_mon + 1) * 100 + now_tm.tm_mday;
+
+    // 当天 8 点推送 (如果错过时间，只要在当天 8 点后且未推送过，就补发)
+    if (g_loop_config.push_today_8am && now_tm.tm_hour >= 8 && last_push_today_date != current_date) {
+        LogMessage("Scheduled task: Today's schedule push (Triggered/Catch-up)");
+        ExecutePythonCommand("--push-today");
+        last_push_today_date = current_date;
+    }
+
+    // 前一天 21 点推送明天课表 (如果错过时间，在 21 点后至午夜前补发)
+    if (g_loop_config.push_tomorrow_9pm && now_tm.tm_hour >= 21 && last_push_tomorrow_date != current_date) {
+        LogMessage("Scheduled task: Tomorrow's schedule push (Triggered/Catch-up)");
+        ExecutePythonCommand("--push-tomorrow");
+        last_push_tomorrow_date = current_date;
+    }
+
+    // 周日 20 点推送下周全部课表 (如果周日 20 点后错过，则在周日内补发)
+    if (g_loop_config.push_next_week_sunday && now_tm.tm_wday == 0 && now_tm.tm_hour >= 20 && last_push_next_week_date != current_date) {
+        LogMessage("Scheduled task: Next week schedule push (Triggered/Catch-up)");
+        ExecutePythonCommand("--push-next-week");
+        last_push_next_week_date = current_date;
+    }
 }
 
 // 执行循环检测
 void ExecuteLoopCheck() {
-    LogMessage("Timer triggered: performing loop check.");
-    if (g_loop_config.grade_enabled) {
-        LogMessage("Grade loop enabled – fetching grades.");
+    LogMessage("Timer triggered: performing checks.");
+    
+    // 每次触发都重新读取配置，确保能及时响应 GUI 的修改
+    ReadLoopConfig();
+    
+    // 1. 检查定时推送
+    ExecuteScheduledPushCheck();
+
+    // 2. 检查循环刷新
+    static time_t last_grade_check = 0;
+    static time_t last_schedule_check = 0;
+    time_t now = time(NULL);
+
+    if (g_loop_config.grade_enabled && (now - last_grade_check >= g_loop_config.grade_interval)) {
+        LogMessage("Grade loop: fetching grades.");
         ExecutePythonCommand("--fetch-grade");
+        last_grade_check = now;
     }
-    if (g_loop_config.schedule_enabled) {
-        LogMessage("Schedule loop enabled – fetching schedule.");
+    
+    if (g_loop_config.schedule_enabled && (now - last_schedule_check >= g_loop_config.schedule_interval)) {
+        LogMessage("Schedule loop: fetching schedule.");
         ExecutePythonCommand("--fetch-schedule");
+        last_schedule_check = now;
     }
 }
 
@@ -521,8 +602,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     InitLogging();
     LogMessage("Application starting...");
 
+    // 双重检查：互斥锁 + 进程列表检查
     HANDLE hMutex = CreateMutexW(NULL, TRUE, L"Capture_PushTrayAppMutex");
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+    bool alreadyRunning = (GetLastError() == ERROR_ALREADY_EXISTS);
+    
+    // 如果互斥锁显示已存在，或者检测到同名进程（排除自身）
+    if (alreadyRunning || IsProcessRunning(L"Capture_Push_tray.exe")) {
         LogMessage("Another instance is already running. Exiting.");
         MessageBoxW(NULL, 
                     L"Capture_Push 托盘程序已经在运行中！\n如果看不到托盘图标，请检查任务管理器。",

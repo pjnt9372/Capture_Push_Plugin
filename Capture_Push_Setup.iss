@@ -15,7 +15,7 @@ InternalCompressLevel=normal
 PrivilegesRequired=admin
 WizardStyle=modern
 SetupIconFile=
-UninstallDisplayIcon={app}\TrayApp.exe
+UninstallDisplayIcon={app}\Capture_Push_tray.exe
 
 [Languages]
 Name: "chinesesimp"; MessagesFile: "ChineseSimplified.isl"
@@ -36,18 +36,18 @@ Source: "config.ini"; DestDir: "{localappdata}\Capture_Push"; Flags: ignoreversi
 Source: "generate_config.py"; DestDir: "{app}"; Flags: ignoreversion
 
 ; C++托盘程序（需要预先编译）
-Source: "tray\build\Release\TrayApp.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "tray\build\Release\Capture_Push_tray.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Dirs]
 ; 创建 AppData 目录
 Name: "{localappdata}\Capture_Push"
 
 [Icons]
-Name: "{group}\Capture_Push托盘"; Filename: "{app}\TrayApp.exe"
+Name: "{group}\Capture_Push托盘"; Filename: "{app}\Capture_Push_tray.exe"
 Name: "{group}\配置工具"; Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\gui\gui.py"""
 Name: "{group}\查看配置信息"; Filename: "{app}\install_config.txt"
 Name: "{group}\卸载Capture_Push"; Filename: "{uninstallexe}"
-Name: "{commondesktop}\Capture_Push"; Filename: "{app}\TrayApp.exe"; Tasks: desktopicon
+Name: "{commondesktop}\Capture_Push"; Filename: "{app}\Capture_Push_tray.exe"; Tasks: desktopicon
 
 [Tasks]
 Name: desktopicon; Description: "创建桌面快捷方式"; GroupDescription: "附加选项:"
@@ -58,7 +58,7 @@ Name: autostart; Description: "开机自动启动托盘程序"; GroupDescription
 Root: HKLM; Subkey: "SOFTWARE\Capture_Push"; ValueType: string; ValueName: "InstallPath"; ValueData: "{app}"; Flags: uninsdeletevalue
 
 ; 自启动托盘程序（如果用户选择了autostart任务）
-Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Capture_Push_Tray"; ValueData: """{app}\TrayApp.exe"""; Flags: uninsdeletevalue; Tasks: autostart
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Capture_Push_Tray"; ValueData: """{app}\Capture_Push_tray.exe"""; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
 ; 运行环境安装器（命令行模式，自动检测地区并选择镜像）
@@ -68,7 +68,7 @@ Filename: "{app}\Capture_Push_Installer.exe"; Parameters: """{app}"""; StatusMsg
 Filename: "{app}\.venv\Scripts\python.exe"; Parameters: """{app}\generate_config.py"" ""{app}"""; StatusMsg: "正在生成配置信息..."; Flags: runhidden waituntilterminated
 
 ; 安装后选项
-Filename: "{app}\TrayApp.exe"; Description: "启动 Capture_Push 托盘程序"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Capture_Push_tray.exe"; Description: "启动 Capture_Push 托盘程序"; Flags: nowait postinstall skipifsilent
 Filename: "{app}\.venv\Scripts\pythonw.exe"; Parameters: """{app}\gui\gui.py"""; Description: "打开配置工具"; Flags: nowait postinstall skipifsilent unchecked
 
 [UninstallDelete]

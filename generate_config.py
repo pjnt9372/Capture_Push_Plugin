@@ -28,7 +28,7 @@ Capture_Push - 安装配置信息
 安装目录: {install_dir}
 虚拟环境: {install_dir}\\.venv
 Python脚本: {install_dir}\\core
-托盘程序: {install_dir}\\TrayApp.exe
+托盘程序: {install_dir}\\Capture_Push_tray.exe
 配置文件: {install_dir}\\config.ini
 
 [注册表项]
@@ -40,7 +40,7 @@ Python脚本: {install_dir}\\core
 自启动托盘程序:
   位置: HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
   键名: Capture_Push_Tray
-  键值: {install_dir}\TrayApp.exe
+  键值: {install_dir}\Capture_Push_tray.exe
 
 [虚拟环境]
 Python解释器: {install_dir}\\.venv\\Scripts\\python.exe

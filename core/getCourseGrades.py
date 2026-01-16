@@ -7,7 +7,13 @@ import configparser
 import os
 import json
 import time
+import sys
 from pathlib import Path
+
+# 添加项目根目录到 sys.path（确保能找到 core 模块）
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 # 导入统一日志模块（AppData 目录）
 try:

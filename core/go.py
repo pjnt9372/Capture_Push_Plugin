@@ -14,7 +14,7 @@ if str(BASE_DIR) not in sys.path:
 
 from core.getCourseGrades import fetch_grades
 from core.getCourseSchedule import fetch_course_schedule
-from core.push import send_grade_mail, send_schedule_mail
+from core.push import send_grade_mail, send_schedule_mail, send_today_schedule_mail, send_full_schedule_mail
 
 # 导入统一配置路径管理（AppData 目录）
 from core.log import get_config_path, get_log_file_path, init_logger
@@ -36,6 +36,7 @@ STATE_DIR.mkdir(parents=True, exist_ok=True)
 
 GRADE_STATE_FILE = STATE_DIR / "last_grades.json"
 SCHEDULE_STATE_FILE = STATE_DIR / "last_schedule_day.txt"
+MANUAL_SCHEDULE_FILE = APPDATA_DIR / "manual_schedule.json"
 
 
 # ---------- 配置 ----------
@@ -153,50 +154,274 @@ def calc_week_and_weekday(first_monday):
     return week, weekday
 
 
-def fetch_and_push_schedule(push=False, force_update=False):
-    """获取并推送课表
-    
-    Args:
-        push: 是否推送课表到邮箱
-        force_update: 是否强制从网络更新（忽略循环检测）
-    """
-    cfg = load_config()
-    username = cfg.get("account", "username")
-    password = cfg.get("account", "password")
+def load_manual_schedule():
+    """加载手动修改的课表数据"""
+    if not MANUAL_SCHEDULE_FILE.exists():
+        return {}
+    try:
+        with open(MANUAL_SCHEDULE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
 
-    first_monday = datetime.datetime.strptime(
-        cfg.get("semester", "first_monday"), "%Y-%m-%d"
-    ).date()
+def fetch_and_push_today_schedule(force_update=False):
+    """获取并推送今日课表"""
+    try:
+        cfg = load_config()
+        username = cfg.get("account", "username")
+        password = cfg.get("account", "password")
+        first_monday = datetime.datetime.strptime(
+            cfg.get("semester", "first_monday"), "%Y-%m-%d"
+        ).date()
 
-    week, weekday = calc_week_and_weekday(first_monday)
-    if weekday is None or weekday == 1:
-        print("ℹ️ 今天不推送课表")
-        return
+        today = datetime.date.today()
+        week, weekday = calc_week_and_weekday(first_monday)
+        
+        if weekday is None:
+            logger.warning("未到开学日期，跳过推送")
+            return
 
-    target_weekday = weekday - 1
-    today_str = f"week{week}_day{target_weekday}"
+        logger.info(f"推送今日课表: 第{week}周 周{weekday}")
+        
+        # 检查是否已推送（按日期记录）
+        state_file = STATE_DIR / "last_push_today.txt"
+        today_str = today.strftime("%Y-%m-%d")
+        if not force_update and state_file.exists():
+            with open(state_file, "r") as f:
+                if f.read().strip() == today_str:
+                    logger.info("今日课表已推送，跳过")
+                    return
 
-    if load_last_schedule_day() == today_str:
-        print("ℹ️ 课表已推送，跳过")
-        return
+        schedule = fetch_course_schedule(username, password, force_update)
+        if not schedule:
+            logger.error("课表获取失败")
+            return
 
-    schedule = fetch_course_schedule(username, password, force_update)
-    if not schedule:
-        print("❌ 课表获取失败")
-        return
+        # 合并手动修改的课表
+        manual_data = load_manual_schedule()
+        # 记录被手动覆盖的格点 (weekday, period)
+        manual_occupied = set()
+        manual_courses = []
+        
+        for key, data in manual_data.items():
+            col, start = map(int, key.split("-"))
+            name = data.get("课程名称", "")
+            if not name: continue
+            
+            row_span = data.get("row_span", 1)
+            # 手动课程默认出现在所有周，或者你可以根据需要添加周次逻辑
+            manual_courses.append({
+                "星期": col,
+                "开始小节": start,
+                "结束小节": start + row_span - 1,
+                "课程名称": name,
+                "教师": data.get("教师", ""),
+                "教室": data.get("教室", ""),
+                "周次列表": ["全学期"]
+            })
+            for p in range(start, start + row_span):
+                manual_occupied.add((col, p))
 
-    filtered = [
-        c for c in schedule
-        if c["星期"] == target_weekday and
-        (week in c["周次列表"] or not c["周次列表"] or c["周次列表"] == ["全学期"])
-    ]
+        # 过滤并合并
+        filtered = []
+        # 先加手动的（如果符合星期）
+        for mc in manual_courses:
+            if mc["星期"] == weekday:
+                filtered.append(mc)
+        
+        # 再加解析的（如果不冲突）
+        for c in schedule:
+            if c["星期"] == weekday and (week in c["周次列表"] or "全学期" in c["周次列表"]):
+                # 检查是否被手动覆盖
+                is_covered = False
+                for p in range(c["开始小节"], c["结束小节"] + 1):
+                    if (weekday, p) in manual_occupied:
+                        is_covered = True
+                        break
+                if not is_covered:
+                    filtered.append(c)
 
-    if push and filtered:
-        send_schedule_mail(filtered, week, target_weekday)
+        send_today_schedule_mail(filtered, week, weekday)
+        
+        with open(state_file, "w") as f:
+            f.write(today_str)
+        logger.info("今日课表推送完成")
+    except Exception as e:
+        logger.error(f"fetch_and_push_today_schedule 异常: {e}", exc_info=True)
 
-    save_last_schedule_day(today_str)
-    print("✅ 课表推送完成")
+def fetch_and_push_tomorrow_schedule(force_update=False):
+    """获取并推送明日课表"""
+    try:
+        cfg = load_config()
+        username = cfg.get("account", "username")
+        password = cfg.get("account", "password")
+        first_monday = datetime.datetime.strptime(
+            cfg.get("semester", "first_monday"), "%Y-%m-%d"
+        ).date()
 
+        tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+        # 计算明天的周次和星期
+        delta = (tomorrow - first_monday).days
+        if delta < 0:
+            logger.warning("明天未到开学日期，跳过推送")
+            return
+        week = delta // 7 + 1
+        weekday = delta % 7 + 1
+
+        logger.info(f"推送明日课表: 第{week}周 周{weekday}")
+        
+        # 检查是否已推送
+        state_file = STATE_DIR / "last_push_tomorrow.txt"
+        tomorrow_str = tomorrow.strftime("%Y-%m-%d")
+        if not force_update and state_file.exists():
+            with open(state_file, "r") as f:
+                if f.read().strip() == tomorrow_str:
+                    logger.info("明日课表已推送，跳过")
+                    return
+
+        schedule = fetch_course_schedule(username, password, force_update)
+        if not schedule:
+            logger.error("课表获取失败")
+            return
+
+        # 合并手动修改的课表
+        manual_data = load_manual_schedule()
+        manual_occupied = set()
+        manual_courses = []
+        
+        for key, data in manual_data.items():
+            col, start = map(int, key.split("-"))
+            name = data.get("课程名称", "")
+            if not name: continue
+            row_span = data.get("row_span", 1)
+            manual_courses.append({
+                "星期": col,
+                "开始小节": start,
+                "结束小节": start + row_span - 1,
+                "课程名称": name,
+                "教师": data.get("教师", ""),
+                "教室": data.get("教室", ""),
+                "周次列表": ["全学期"]
+            })
+            for p in range(start, start + row_span):
+                manual_occupied.add((col, p))
+
+        # 过滤并合并
+        filtered = []
+        for mc in manual_courses:
+            if mc["星期"] == weekday:
+                filtered.append(mc)
+        
+        for c in schedule:
+            if c["星期"] == weekday and (week in c["周次列表"] or "全学期" in c["周次列表"]):
+                is_covered = False
+                for p in range(c["开始小节"], c["结束小节"] + 1):
+                    if (weekday, p) in manual_occupied:
+                        is_covered = True
+                        break
+                if not is_covered:
+                    filtered.append(c)
+
+        send_schedule_mail(filtered, week, weekday)
+        
+        with open(state_file, "w") as f:
+            f.write(tomorrow_str)
+        logger.info("明日课表推送完成")
+    except Exception as e:
+        logger.error(f"fetch_and_push_tomorrow_schedule 异常: {e}", exc_info=True)
+
+def fetch_and_push_next_week_schedule(force_update=False):
+    """获取并推送下周全周课表"""
+    try:
+        cfg = load_config()
+        username = cfg.get("account", "username")
+        password = cfg.get("account", "password")
+        first_monday = datetime.datetime.strptime(
+            cfg.get("semester", "first_monday"), "%Y-%m-%d"
+        ).date()
+
+        # 计算下周周一的周次
+        next_monday = datetime.date.today() + datetime.timedelta(days=(7 - datetime.date.today().weekday()))
+        delta = (next_monday - first_monday).days
+        if delta < 0:
+            logger.warning("下周未到开学日期，跳过推送")
+            return
+        next_week = delta // 7 + 1
+
+        logger.info(f"推送下周课表: 第{next_week}周")
+        
+        # 检查是否已推送
+        state_file = STATE_DIR / "last_push_next_week.txt"
+        week_str = f"week_{next_week}"
+        if not force_update and state_file.exists():
+            with open(state_file, "r") as f:
+                if f.read().strip() == week_str:
+                    logger.info(f"第 {next_week} 周课表已推送，跳过")
+                    return
+
+        schedule = fetch_course_schedule(username, password, force_update)
+        if not schedule:
+            logger.error("课表获取失败")
+            return
+
+        # 加载手动修改
+        manual_data = load_manual_schedule()
+        manual_courses = []
+        manual_occupied = set() # (weekday, period)
+        
+        for key, data in manual_data.items():
+            col, start = map(int, key.split("-"))
+            name = data.get("课程名称", "")
+            if not name: continue
+            row_span = data.get("row_span", 1)
+            mc = {
+                "星期": col,
+                "开始小节": start,
+                "结束小节": start + row_span - 1,
+                "课程名称": name,
+                "教师": data.get("教师", ""),
+                "教室": data.get("教室", ""),
+                "周次列表": ["全学期"]
+            }
+            manual_courses.append(mc)
+            for p in range(start, start + row_span):
+                manual_occupied.add((col, p))
+
+        # 按天分组
+        full_schedule = []
+        for d in range(1, 8):
+            day_list = []
+            # 手动课程
+            for mc in manual_courses:
+                if mc["星期"] == d:
+                    day_list.append(mc)
+            
+            # 解析课程
+            for c in schedule:
+                if c["星期"] == d and (next_week in c["周次列表"] or "全学期" in c["周次列表"]):
+                    is_covered = False
+                    for p in range(c["开始小节"], c["结束小节"] + 1):
+                        if (d, p) in manual_occupied:
+                            is_covered = True
+                            break
+                    if not is_covered:
+                        day_list.append(c)
+            
+            if day_list:
+                # 排序
+                day_list.sort(key=lambda x: x["开始小节"])
+                full_schedule.append(day_list)
+
+        if full_schedule:
+            send_full_schedule_mail(full_schedule, next_week)
+            with open(state_file, "w") as f:
+                f.write(week_str)
+            logger.info("下周课表推送完成")
+        else:
+            logger.info("下周无课，不推送")
+
+    except Exception as e:
+        logger.error(f"fetch_and_push_next_week_schedule 异常: {e}", exc_info=True)
 
 # ---------- CLI ----------
 def main():
@@ -206,7 +431,10 @@ def main():
     parser.add_argument("--push-grade", action="store_true", help="推送变化的成绩")
     parser.add_argument("--push-all-grades", action="store_true", help="推送所有成绩（无论是否有变化）")
     parser.add_argument("--fetch-schedule", action="store_true", help="获取课表（不推送）")
-    parser.add_argument("--push-schedule", action="store_true", help="推送课表")
+    parser.add_argument("--push-schedule", action="store_true", help="推送课表 (兼容旧参数)")
+    parser.add_argument("--push-today", action="store_true", help="推送今日课表")
+    parser.add_argument("--push-tomorrow", action="store_true", help="推送明日课表")
+    parser.add_argument("--push-next-week", action="store_true", help="推送下周全周课表")
     parser.add_argument("--force", action="store_true", help="强制从网络更新，忽略循环检测")
     args = parser.parse_args()
     
@@ -224,11 +452,21 @@ def main():
         logger.info("执行: fetch_and_push_grades(push=True, push_all=True)")
         fetch_and_push_grades(push=True, force_update=args.force, push_all=True)
     if args.fetch_schedule:
-        logger.info("执行: fetch_and_push_schedule(push=False)")
-        fetch_and_push_schedule(push=False, force_update=args.force)
+        logger.info("执行: fetch_course_schedule")
+        cfg = load_config()
+        fetch_course_schedule(cfg.get("account", "username"), cfg.get("account", "password"), force_update=args.force)
     if args.push_schedule:
-        logger.info("执行: fetch_and_push_schedule(push=True)")
-        fetch_and_push_schedule(push=True, force_update=args.force)
+        logger.info("执行: fetch_and_push_today_schedule(兼容模式)")
+        fetch_and_push_today_schedule(force_update=args.force)
+    if args.push_today:
+        logger.info("执行: fetch_and_push_today_schedule")
+        fetch_and_push_today_schedule(force_update=args.force)
+    if args.push_tomorrow:
+        logger.info("执行: fetch_and_push_tomorrow_schedule")
+        fetch_and_push_tomorrow_schedule(force_update=args.force)
+    if args.push_next_week:
+        logger.info("执行: fetch_and_push_next_week_schedule")
+        fetch_and_push_next_week_schedule(force_update=args.force)
     
     logger.info("main() 执行完成")
 
