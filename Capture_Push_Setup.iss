@@ -34,6 +34,9 @@ Source: "requirements.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "core\*"; DestDir: "{app}\core"; Flags: ignoreversion recursesubdirs
 Source: "gui\*"; DestDir: "{app}\gui"; Flags: ignoreversion recursesubdirs
 
+; 院校模块
+Source: "core\school\*"; DestDir: "{app}\core\school"; Flags: ignoreversion recursesubdirs
+
 ; 配置文件 - 同时释放到程序目录和 AppData 目录
 Source: "config.ini"; DestDir: "{app}"; Flags: ignoreversion
 Source: "config.ini"; DestDir: "{localappdata}\Capture_Push"; Flags: ignoreversion

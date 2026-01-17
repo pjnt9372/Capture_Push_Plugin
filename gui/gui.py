@@ -8,10 +8,10 @@ from PySide6.QtWidgets import (
     QLineEdit, QPushButton, QFormLayout, QMessageBox,
     QCheckBox, QSpinBox, QHBoxLayout, QGroupBox, QRadioButton,
     QButtonGroup, QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView,
-    QFrame # 新增 QFrame 用于美化色块
+    QFrame, QDateEdit, QComboBox # 新增 QFrame 用于美化色块
 )
 from PySide6.QtGui import QColor, QFont # 新增相关引用
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QDate
 
 # 添加父目录到 sys.path（确保能找到 core 模块）
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,20 +20,25 @@ if str(BASE_DIR) not in sys.path:
 
 # 导入统一配置路径管理和解析模块
 from core.log import get_config_path, get_log_file_path
-from core.getCourseGrades import parse_grades
-from core.getCourseSchedule import parse_schedule
+from core.school import get_available_schools, get_school_module
 
 # 使用统一的配置路径管理（AppData 目录）
 CONFIG_FILE = str(get_config_path())
 APPDATA_DIR = get_log_file_path('gui').parent
 MANUAL_SCHEDULE_FILE = APPDATA_DIR / "manual_schedule.json"
 
+def get_current_school_code():
+    """从配置文件中获取当前院校代码"""
+    cfg = configparser.ConfigParser()
+    cfg.read(CONFIG_FILE, encoding="utf-8")
+    return cfg.get("account", "school_code", fallback="10546")
+
 class CourseEditDialog(QWidget):
     """手动编辑/添加课程的对话框"""
     def __init__(self, parent=None, data=None):
         super().__init__(parent, Qt.Window)
         self.setWindowTitle("编辑课程")
-        self.setFixedSize(350, 250)
+        self.setFixedSize(400, 400) # 增大尺寸
         self.data = data or {}
         self.init_ui()
 
@@ -44,6 +49,9 @@ class CourseEditDialog(QWidget):
         self.name_edit = QLineEdit(self.data.get("课程名称", ""))
         self.room_edit = QLineEdit(self.data.get("教室", ""))
         self.teacher_edit = QLineEdit(self.data.get("教师", ""))
+        self.weeks_edit = QLineEdit(self.data.get("上课周次", "1-20"))
+        # 优化提示文字
+        self.weeks_edit.setPlaceholderText("提示：1-16 (连续) 或 1,3,5 (单周)")
         
         # 允许用户指定持续节数
         self.span_spin = QSpinBox()
@@ -53,6 +61,7 @@ class CourseEditDialog(QWidget):
         form.addRow("课程名称:", self.name_edit)
         form.addRow("教室:", self.room_edit)
         form.addRow("教师:", self.teacher_edit)
+        form.addRow("上课周次:", self.weeks_edit)
         form.addRow("持续节数:", self.span_spin)
         
         layout.addLayout(form)
@@ -67,11 +76,31 @@ class CourseEditDialog(QWidget):
         btn_layout.addWidget(cancel_btn)
         layout.addLayout(btn_layout)
 
+    def parse_weeks(self, weeks_str):
+        """解析周次字符串为列表"""
+        weeks = set()
+        try:
+            parts = weeks_str.replace("，", ",").split(",")
+            for part in parts:
+                if "-" in part:
+                    start, end = map(int, part.split("-"))
+                    weeks.update(range(start, end + 1))
+                elif part.strip():
+                    weeks.add(int(part.strip()))
+        except:
+            pass
+        return sorted(list(weeks))
+
     def accept(self):
+        weeks_str = self.weeks_edit.text()
+        weeks_list = self.parse_weeks(weeks_str)
+        
         self.result = {
             "课程名称": self.name_edit.text(),
             "教室": self.room_edit.text(),
             "教师": self.teacher_edit.text(),
+            "上课周次": weeks_str,
+            "周次列表": weeks_list,
             "row_span": self.span_spin.value(),
             "is_manual": True
         }
@@ -130,7 +159,13 @@ class GradesViewerWindow(QWidget):
             with open(grade_html_file, "r", encoding="utf-8") as f:
                 html = f.read()
             
-            grades = parse_grades(html)
+            school_code = get_current_school_code()
+            school_mod = get_school_module(school_code)
+            if not school_mod:
+                QMessageBox.critical(self, "错误", f"找不到院校模块: {school_code}")
+                return
+
+            grades = school_mod.parse_grades(html)
             if not grades:
                 self.table.setRowCount(0)
                 # QMessageBox.information(self, "提示", "未能从缓存文件中解析出成绩，可能文件内容为空或格式不匹配。")
@@ -176,7 +211,7 @@ class CourseBlock(QFrame):
                 margin: 1px;
             }}
             QLabel {{
-                color: white;
+                color: black;
                 background: transparent;
                 font-family: "Microsoft YaHei";
             }}
@@ -210,11 +245,11 @@ class ScheduleViewerWindow(QWidget):
         self.setWindowTitle("Capture_Push · 课表查看")
         self.resize(1100, 850)
         
-        # 预设柔和的颜色列表
+        # 预设更柔和的浅色列表，适合黑色文字
         self.colors = [
-            "#FF9AA2", "#FFB7B2", "#FFDAC1", "#E2F0CB", 
-            "#B5EAD7", "#C7CEEA", "#97C1A9", "#8FCACA",
-            "#A0CED9", "#ADF7B6", "#FFEE93", "#FFC09F"
+            "#FFD1D1", "#FFDFD1", "#FFF0D1", "#E6FAD1", 
+            "#D1FAE5", "#D1F2FA", "#D1D5FA", "#E9D1FA",
+            "#FAD1F5", "#FAD1D1", "#F5F5F5", "#EEEEEE"
         ]
         self.course_colors = {}
         
@@ -259,17 +294,17 @@ class ScheduleViewerWindow(QWidget):
         # 周次切换
         top_ctrl.addWidget(QLabel("当前显示："))
         self.week_combo = QSpinBox()
-        self.week_combo.setRange(1, 20)
+        self.week_combo.setRange(1, 25) # 稍微扩大范围
         self.week_combo.setValue(self.selected_week)
         self.week_combo.setPrefix("第 ")
         self.week_combo.setSuffix(" 周")
         self.week_combo.valueChanged.connect(self.on_week_changed)
         top_ctrl.addWidget(self.week_combo)
         
-        if self.selected_week == self.current_week:
-            curr_label = QLabel("(本周)")
-            curr_label.setStyleSheet("color: #0078d4; font-weight: bold;")
-            top_ctrl.addWidget(curr_label)
+        self.this_week_label = QLabel("")
+        self.this_week_label.setStyleSheet("color: #0078d4; font-weight: bold;")
+        top_ctrl.addWidget(self.this_week_label)
+        self.update_this_week_label()
             
         top_ctrl.addStretch()
         top_ctrl.addWidget(QLabel("提示：双击单元格进行手动编辑"))
@@ -319,7 +354,15 @@ class ScheduleViewerWindow(QWidget):
 
     def on_week_changed(self, value):
         self.selected_week = value
+        self.update_this_week_label()
         self.load_data()
+
+    def update_this_week_label(self):
+        """更新本周标识标签"""
+        if self.selected_week == self.current_week:
+            self.this_week_label.setText("(本周)")
+        else:
+            self.this_week_label.setText(f"(本周是第 {self.current_week} 周)")
 
     def on_cell_double_clicked(self, row, col):
         """双击单元格打开编辑对话框"""
@@ -397,7 +440,13 @@ class ScheduleViewerWindow(QWidget):
             if schedule_html_file.exists():
                 with open(schedule_html_file, "r", encoding="utf-8") as f:
                     html = f.read()
-                parsed_schedule = parse_schedule(html)
+                
+                school_code = get_current_school_code()
+                school_mod = get_school_module(school_code)
+                if school_mod:
+                    parsed_schedule = school_mod.parse_schedule(html)
+                else:
+                    QMessageBox.warning(self, "警告", f"找不到院校模块: {school_code}")
             
             # 清除之前的色块和合并单元格
             for r in range(10):
@@ -414,6 +463,11 @@ class ScheduleViewerWindow(QWidget):
                 row = start - 1
                 row_span = data.get("row_span", 1)
                 
+                # 检查周次是否包含在内
+                weeks_list = data.get("周次列表", [])
+                if weeks_list and self.selected_week not in weeks_list:
+                    continue
+
                 name = data.get("课程名称", "")
                 room = data.get("教室", "")
                 teacher = data.get("教师", "")
@@ -525,14 +579,22 @@ class ConfigWindow(QWidget):
         layout = QVBoxLayout(tab)
         form = QFormLayout()
 
+        self.school_combo = QComboBox()
+        self.available_schools = get_available_schools()
+        for code, name in self.available_schools.items():
+            self.school_combo.addItem(name, code)
+
         self.username = QLineEdit()
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.Password)
-        self.first_monday = QLineEdit()
+        self.first_monday = QDateEdit()
+        self.first_monday.setCalendarPopup(True)
+        self.first_monday.setDisplayFormat("yyyy-MM-dd")
 
+        form.addRow("选择院校", self.school_combo)
         form.addRow("学号", self.username)
         form.addRow("密码", self.password)
-        form.addRow("第一周周一 (YYYY-MM-DD)", self.first_monday)
+        form.addRow("第一周周一", self.first_monday)
         layout.addLayout(form)
 
         loop_group = QGroupBox("循环检测配置")
@@ -639,10 +701,21 @@ class ConfigWindow(QWidget):
         return tab
 
     def load_config(self):
+        # 院校
+        school_code = self.cfg.get("account", "school_code", fallback="10546")
+        index = self.school_combo.findData(school_code)
+        if index >= 0:
+            self.school_combo.setCurrentIndex(index)
+
         # 账号
         self.username.setText(self.cfg.get("account", "username", fallback=""))
         self.password.setText(self.cfg.get("account", "password", fallback=""))
-        self.first_monday.setText(self.cfg.get("semester", "first_monday", fallback=""))
+        
+        date_str = self.cfg.get("semester", "first_monday", fallback="")
+        if date_str:
+            self.first_monday.setDate(QDate.fromString(date_str, "yyyy-MM-dd"))
+        else:
+            self.first_monday.setDate(QDate.currentDate())
 
         # 循环
         self.loop_grade_enabled.setChecked(self.cfg.getboolean("loop_getCourseGrades", "enabled", fallback=True))
@@ -681,11 +754,12 @@ class ConfigWindow(QWidget):
 
         # 写入内存
         if "account" not in self.cfg: self.cfg["account"] = {}
+        self.cfg["account"]["school_code"] = self.school_combo.currentData()
         self.cfg["account"]["username"] = self.username.text()
         self.cfg["account"]["password"] = self.password.text()
 
         if "semester" not in self.cfg: self.cfg["semester"] = {}
-        self.cfg["semester"]["first_monday"] = self.first_monday.text()
+        self.cfg["semester"]["first_monday"] = self.first_monday.date().toString("yyyy-MM-dd")
 
         if "loop_getCourseGrades" not in self.cfg: self.cfg["loop_getCourseGrades"] = {}
         self.cfg["loop_getCourseGrades"]["enabled"] = str(self.loop_grade_enabled.isChecked())

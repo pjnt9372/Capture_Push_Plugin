@@ -11,17 +11,12 @@ import sys
 from pathlib import Path
 
 # 添加项目根目录到 sys.path（确保能找到 core 模块）
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 # 导入统一日志模块（AppData 目录）
-try:
-    # 优先尝试相对导入（从 core 目录内运行）
-    from log import init_logger, get_config_path, get_log_file_path
-except ImportError:
-    # 回退到绝对导入（从项目根目录运行）
-    from core.log import init_logger, get_config_path, get_log_file_path
+from core.log import init_logger, get_config_path, get_log_file_path
 
 # 初始化日志（如果失败直接崩溃）
 logger = init_logger('getCourseGrades')

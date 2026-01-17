@@ -32,6 +32,12 @@ jobs:
         run: |
           cmake --build tray/build --config Release
 
+      - name: Prepare School Modules
+        run: |
+          # 确保 school 目录结构被包含在构建中
+          echo "Including school modules in build..."
+          dir core\school /s
+
       - name: Download Python 3.11.9 Installer
         shell: powershell
         run: |

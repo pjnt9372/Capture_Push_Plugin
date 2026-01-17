@@ -12,9 +12,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from core.getCourseGrades import fetch_grades
-from core.getCourseSchedule import fetch_course_schedule
 from core.push import send_grade_mail, send_schedule_mail, send_today_schedule_mail, send_full_schedule_mail
+from core.school import get_school_module
 
 # 导入统一配置路径管理（AppData 目录）
 from core.log import get_config_path, get_log_file_path, init_logger
@@ -44,6 +43,18 @@ def load_config():
     cfg = configparser.ConfigParser()
     cfg.read(CONFIG_FILE, encoding="utf-8")
     return cfg
+
+
+# ---------- 院校相关 ----------
+def get_current_school_module():
+    """根据配置获取当前院校模块"""
+    cfg = load_config()
+    school_code = cfg.get("account", "school_code", fallback="10546")
+    module = get_school_module(school_code)
+    if not module:
+        logger.error(f"找不到院校模块: {school_code}，回退到默认 10546")
+        module = get_school_module("10546")
+    return module
 
 
 # ---------- 成绩相关 ----------
@@ -84,7 +95,8 @@ def fetch_and_push_grades(push=False, force_update=False, push_all=False):
         password = cfg.get("account", "password")
         logger.info(f"账号配置: username={username[:2]}***")
 
-        grades = fetch_grades(username, password, force_update)
+        school_mod = get_current_school_module()
+        grades = school_mod.fetch_grades(username, password, force_update)
         if not grades:
             logger.error("成绩获取失败")
             print("❌ 成绩获取失败")
@@ -192,7 +204,8 @@ def fetch_and_push_today_schedule(force_update=False):
                     logger.info("今日课表已推送，跳过")
                     return
 
-        schedule = fetch_course_schedule(username, password, force_update)
+        school_mod = get_current_school_module()
+        schedule = school_mod.fetch_course_schedule(username, password, force_update)
         if not schedule:
             logger.error("课表获取失败")
             return
@@ -279,7 +292,8 @@ def fetch_and_push_tomorrow_schedule(force_update=False):
                     logger.info("明日课表已推送，跳过")
                     return
 
-        schedule = fetch_course_schedule(username, password, force_update)
+        school_mod = get_current_school_module()
+        schedule = school_mod.fetch_course_schedule(username, password, force_update)
         if not schedule:
             logger.error("课表获取失败")
             return
@@ -359,7 +373,8 @@ def fetch_and_push_next_week_schedule(force_update=False):
                     logger.info(f"第 {next_week} 周课表已推送，跳过")
                     return
 
-        schedule = fetch_course_schedule(username, password, force_update)
+        school_mod = get_current_school_module()
+        schedule = school_mod.fetch_course_schedule(username, password, force_update)
         if not schedule:
             logger.error("课表获取失败")
             return
@@ -454,7 +469,8 @@ def main():
     if args.fetch_schedule:
         logger.info("执行: fetch_course_schedule")
         cfg = load_config()
-        fetch_course_schedule(cfg.get("account", "username"), cfg.get("account", "password"), force_update=args.force)
+        school_mod = get_current_school_module()
+        school_mod.fetch_course_schedule(cfg.get("account", "username"), cfg.get("account", "password"), force_update=args.force)
     if args.push_schedule:
         logger.info("执行: fetch_and_push_today_schedule(兼容模式)")
         fetch_and_push_today_schedule(force_update=args.force)

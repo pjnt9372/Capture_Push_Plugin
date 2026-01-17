@@ -27,6 +27,29 @@ Capture_Push 是一个课程成绩和课表自动追踪推送系统，能够自�
 - **循环检测**：支持后台自动循环检测成绩和课表变化
 - **配置管理**：便捷的配置界面和编辑功能
 
+## 多院校支持
+
+### 院校模块化
+- **模块化设计**：支持多院校扩展，每个院校的抓取逻辑独立封装
+- **动态加载**：系统根据配置自动加载对应的院校模块
+- **统一接口**：所有院校模块遵循统一的API接口标准
+
+### 开发新院校
+要在系统中添加一所新学校（例如：代码为`23333`的“示例大学”），请按以下步骤操作：
+
+1. **创建目录**：在 `core/school/` 目录下创建以该校代码命名的文件夹，如 `core/school/23333/`
+2. **实现模块**：在新建的文件夹内，创建 `getCourseGrades.py` 和 `getCourseSchedule.py` 两个文件。
+   - `getCourseGrades.py`：需实现 `fetch_grades(username, password, force_update=False)` 和 `parse_grades(html)` 方法。
+   - `getCourseSchedule.py`：需实现 `fetch_course_schedule(username, password, force_update=False)` 和 `parse_schedule(html)` 方法。
+3. **创建元数据**：在 `core/school/23333/` 目录下创建 `__init__.py` 文件，并定义 `SCHOOL_NAME` 和 `SCHOOL_CODE` 常量，例如：
+   ```python
+   SCHOOL_NAME = "示例大学"
+   SCHOOL_CODE = "23333"
+   from .getCourseGrades import fetch_grades, parse_grades
+   from .getCourseSchedule import fetch_course_schedule, parse_schedule
+   ```
+4. **测试**：在GUI的“基本配置”中，从院校选择下拉框中选择“示例大学”，然后进行测试。
+
 ## 技术特性
 
 ### 1. 日志系统
@@ -39,7 +62,6 @@ Capture_Push 是一个课程成绩和课表自动追踪推送系统，能够自�
 - **uv 支持**：现代化依赖管理工具支持
 - **requirements.txt**：标准依赖文件支持
 - **虚拟环境**：完整的虚拟环境管理
-- **PyInstaller**：打包工具集成
 
 ### 3. 配置管理
 - **配置文件**：支持 `config.ini` 配置文件
@@ -51,8 +73,14 @@ Capture_Push 是一个课程成绩和课表自动追踪推送系统，能够自�
 ```
 Capture_Push/
 ├── core/                   # 核心功能模块
-│   ├── getCourseGrades.py  # 成绩获取模块
-│   ├── getCourseSchedule.py # 课表获取模块  
+│   ├── school/              # 院校模块根目录
+│   │   ├── 10546/           # 衡阳师范学院模块
+│   │   │   ├── getCourseGrades.py
+│   │   │   ├── getCourseSchedule.py
+│   │   │   └── __init__.py
+│   │   └── __init__.py      # 院校管理入口
+│   ├── getCourseGrades.py  # 成绩获取模块（已废弃）
+│   ├── getCourseSchedule.py # 课表获取模块（已废弃）
 │   ├── push.py            # 推送模块（原 mailer）
 │   └── go.py              # 主执行模块
 ├── gui/                   # GUI 界面模块
