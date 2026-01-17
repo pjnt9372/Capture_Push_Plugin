@@ -30,9 +30,10 @@
 #define ID_MENU_SCHEDULE_TOMORROW 1005
 #define ID_MENU_SCHEDULE_FULL 1006
 #define ID_MENU_REFRESH_SCHEDULE 1007
-#define ID_MENU_EXIT 1008
-#define ID_MENU_OPEN_CONFIG 1009
-#define ID_MENU_EDIT_CONFIG 1010
+#define ID_MENU_SEND_CRASH_REPORT 1008
+#define ID_MENU_EXIT 1009
+#define ID_MENU_OPEN_CONFIG 1010
+#define ID_MENU_EDIT_CONFIG 1011
 #define TIMER_LOOP_CHECK 1001
 
 NOTIFYICONDATAW nid;
@@ -361,7 +362,7 @@ std::string GetExecutableDirectory() {
 // 检查Python脚本是否存在
 bool CheckPythonEnvironment() {
     std::string exe_dir = GetExecutableDirectory();
-    std::string pythonw_path = exe_dir + "\\.venv\\Scripts\\pythonw.exe";
+    std::string pythonw_path = exe_dir + "\\.venv\\pythonw.exe";
     std::string script_path = exe_dir + "\\core\\go.py";
     DWORD pythonw_attr = GetFileAttributesA(pythonw_path.c_str());
     DWORD script_attr = GetFileAttributesA(script_path.c_str());
@@ -378,7 +379,7 @@ void ExecutePythonCommand(const std::string& command_suffix) {
     }
     
     std::string exe_dir = GetExecutableDirectory();
-    std::string pythonw_path = exe_dir + "\\.venv\\Scripts\\pythonw.exe";
+    std::string pythonw_path = exe_dir + "\\.venv\\pythonw.exe";
     std::string script_path = exe_dir + "\\core\\go.py";
     std::string full_command = "\"" + pythonw_path + "\" \"" + script_path + "\" " + command_suffix;
     
@@ -405,36 +406,28 @@ void ExecutePythonCommand(const std::string& command_suffix) {
 void ExecuteConfigGui() {
     LogMessage("Launching config GUI...");
     std::string exe_dir = GetExecutableDirectory();
-    std::string pythonw_path = exe_dir + "\\.venv\\Scripts\\pythonw.exe";
-    std::string gui_path = exe_dir + "\\gui\\gui.py";
+    std::string pythonw_path = exe_dir + "\\.venv\\pythonw.exe";
+    std::string gui_script_path = exe_dir + "\\gui\\gui.py";
 
-    if (GetFileAttributesA(pythonw_path.c_str()) == INVALID_FILE_ATTRIBUTES ||
-        GetFileAttributesA(gui_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
-        LogMessage("Config GUI files missing.");
-        MessageBoxA(NULL, "配置界面所需的 Python 环境未正确安装！\n请重新运行安装程序。", "错误", MB_OK | MB_ICONERROR);
+    if (GetFileAttributesA(pythonw_path.c_str()) == INVALID_FILE_ATTRIBUTES || 
+        GetFileAttributesA(gui_script_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        LogMessage("Python environment or GUI script missing.");
+        MessageBoxA(NULL, "配置界面所需环境未找到！\n请重新运行安装程序。", "错误", MB_OK | MB_ICONERROR);
         return;
     }
 
-    std::string full_command = "\"" + pythonw_path + "\" \"" + gui_path + "\"";
-    STARTUPINFOA si;
-    PROCESS_INFORMATION pi;
-    ZeroMemory(&si, sizeof(si));
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_SHOW;
-    ZeroMemory(&pi, sizeof(pi));
+    // 使用 ShellExecuteA 启动 pythonw.exe 并传递 gui.py 路径
+    std::string params = "\"" + gui_script_path + "\"";
+    HINSTANCE result = ShellExecuteA(NULL, "open", pythonw_path.c_str(), params.c_str(), NULL, SW_SHOW);
 
-    if (CreateProcessA(NULL, (LPSTR)full_command.c_str(), NULL, NULL, FALSE,
-                       0, NULL, exe_dir.c_str(), &si, &pi)) {
-        LogMessage("Config GUI launched.");
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-    } else {
+    if ((intptr_t)result <= 32) {
         DWORD error = GetLastError();
         LogMessage("Failed to launch config GUI. Error: " + std::to_string(error));
         char error_msg[256];
-        sprintf_s(error_msg, "无法启动配置工具！\n错误代码：%lu\n请检查Python环境是否正确安装。", error);
+        sprintf_s(error_msg, "无法启动配置工具！\n错误代码：%lu\n请检查程序文件是否完整。", error);
         MessageBoxA(NULL, error_msg, "错误", MB_OK | MB_ICONERROR);
+    } else {
+        LogMessage("Config GUI launched.");
     }
 }
 
@@ -481,7 +474,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             nid.uCallbackMessage = WM_TRAYICON;
             wcscpy_s(nid.szTip, L"Capture_Push");
             nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
-            Shell_NotifyIcon(NIM_ADD, &nid);
+            Shell_NotifyIconW(NIM_ADD, &nid);
             
             ReadLoopConfig();
             int interval = GetMinLoopInterval();
@@ -516,6 +509,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 AppendMenuW(hMenu, MF_STRING, ID_MENU_SCHEDULE_TOMORROW, L"推送明天课表");
                 AppendMenuW(hMenu, MF_STRING, ID_MENU_SCHEDULE_FULL, L"推送本学期全部课表");
                 AppendMenuW(hMenu, MF_STRING, ID_MENU_REFRESH_SCHEDULE, L"刷新课表");
+                AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
+                AppendMenuW(hMenu, MF_STRING, ID_MENU_SEND_CRASH_REPORT, L"发送崩溃报告");
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
                 AppendMenuW(hMenu, MF_STRING, ID_MENU_OPEN_CONFIG, L"打开配置工具");
                 AppendMenuW(hMenu, MF_STRING, ID_MENU_EDIT_CONFIG, L"更改配置文件");
@@ -555,6 +550,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     LogMessage("User selected: Fetch full schedule");
                     ExecutePythonCommand("--fetch-schedule --force");
                     break;
+                case ID_MENU_SEND_CRASH_REPORT:
+                    LogMessage("User selected: Send crash report");
+                    ExecutePythonCommand("--pack-logs");
+                    break;
                 case ID_MENU_REFRESH_SCHEDULE:
                     LogMessage("User selected: Refresh schedule");
                     ExecutePythonCommand("--fetch-schedule --force");
@@ -568,7 +567,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 case ID_MENU_EXIT:
                     LogMessage("User selected 'Exit'. Shutting down.");
                     KillTimer(hwnd, TIMER_LOOP_CHECK);
-                    Shell_NotifyIcon(NIM_DELETE, &nid);
+                    Shell_NotifyIconW(NIM_DELETE, &nid);
                     PostQuitMessage(0);
                     break;
             }
@@ -578,7 +577,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_DESTROY:
         {
             KillTimer(hwnd, TIMER_LOOP_CHECK);
-            Shell_NotifyIcon(NIM_DELETE, &nid);
+            Shell_NotifyIconW(NIM_DELETE, &nid);
             PostQuitMessage(0);
             break;
         }

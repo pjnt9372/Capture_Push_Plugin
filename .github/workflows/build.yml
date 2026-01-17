@@ -1,6 +1,9 @@
 name: Build and Release
 
 on:
+  push:
+    branches:
+      - master
   workflow_dispatch:
 
 jobs:
@@ -32,45 +35,57 @@ jobs:
         run: |
           cmake --build tray/build --config Release
 
-      - name: Prepare School Modules
-        run: |
-          # 确保 school 目录结构被包含在构建中
-          echo "Including school modules in build..."
-          Get-ChildItem -Path "core/school" -Recurse
-
-      - name: Download Python 3.11.9 Installer
+      - name: Create and Prepare Portable Python Environment
         shell: powershell
         run: |
-          $url = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
-          $dest = "python-3.11.9-amd64.exe"
-          Write-Host "Downloading Python 3.11.9 from $url..."
-          Invoke-WebRequest -Uri $url -OutFile $dest
-          if (Test-Path $dest) {
-              Write-Host "Python installer downloaded successfully."
-          } else {
-              Write-Error "Failed to download Python installer."
-              exit 1
-          }
+          $pyVersion = "3.11.9"
+          $pyUrl = "https://www.python.org/ftp/python/$pyVersion/python-$pyVersion-embed-amd64.zip"
+          Write-Host "Downloading Embeddable Python from $pyUrl..."
+          Invoke-WebRequest -Uri $pyUrl -OutFile "python_embed.zip"
+          
+          Write-Host "Extracting to .venv..."
+          Expand-Archive -Path "python_embed.zip" -DestinationPath ".venv"
+          
+          cd .venv
+          # 1. 允许使用 site-packages：修改 ._pth 文件
+          $pthFile = Get-ChildItem -Filter "python*._pth" | Select-Object -First 1
+          $content = Get-Content $pthFile.Name
+          $content = $content -replace '#import site', 'import site'
+          $content | Set-Content $pthFile.Name
+          
+          # 2. 安装 pip
+          Write-Host "Installing pip..."
+          Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile "get-pip.py"
+          .\python.exe get-pip.py --no-warn-script-location
+          
+          # 3. 安装项目依赖
+          Write-Host "Installing dependencies..."
+          .\python.exe -m pip install -r ..\requirements.txt --no-warn-script-location
+          
+          # 4. 清理
+          Remove-Item "get-pip.py"
+          Remove-Item "..\python_embed.zip"
+          cd ..
+          Write-Host "Portable Python environment prepared successfully."
 
       - name: Setup Inno Setup Chinese Support
         shell: powershell
         run: |
-          # 使用社区维护的中文语言包镜像，这比官方仓库的 Unofficial 目录更稳定
-          $url = "https://raw.githubusercontent.com/kira-96/Inno-Setup-Chinese-Simplified-Translation/master/ChineseSimplified.isl"
-          try {
+          # 检查本地是否已存在语言包，不存在则下载
+          if (Test-Path "ChineseSimplified.isl") {
+              Write-Host "Using existing ChineseSimplified.isl from repository."
+          } else {
+              $url = "https://raw.githubusercontent.com/kira-96/Inno-Setup-Chinese-Simplified-Translation/master/ChineseSimplified.isl"
               Write-Host "Downloading ChineseSimplified.isl from $url..."
               Invoke-WebRequest -Uri $url -OutFile "ChineseSimplified.isl" -ErrorAction Stop
-              
-              # 验证文件开头是否包含 ISL 的典型标记 [LangOptions]
-              $content = Get-Content "ChineseSimplified.isl" -Raw -Encoding utf8
-              if ($content -notmatch "\[LangOptions\]") {
-                  throw "Downloaded file is not a valid ISL file. Content starts with: $($content.Substring(0, [Math]::Min(100, $content.Length)))"
-              }
-              Write-Host "ChineseSimplified.isl downloaded and verified successfully."
-          } catch {
-              Write-Error "Failed to download or verify ChineseSimplified.isl: $_"
-              exit 1
           }
+          
+          # 验证文件内容
+          $content = Get-Content "ChineseSimplified.isl" -Raw -Encoding utf8
+          if ($content -notmatch "\[LangOptions\]") {
+              throw "ChineseSimplified.isl is invalid."
+          }
+          Write-Host "ChineseSimplified.isl verified successfully."
 
       - name: Build Installer with Inno Setup
         run: |
@@ -87,13 +102,15 @@ jobs:
       - name: Extract Version
         shell: powershell
         run: |
-          $version = (Get-Content "VERSION").Trim()
+          # 确保读取第一行且去空格
+          $version = (Get-Content "VERSION" | Select-Object -First 1).Trim()
           if ($version) {
             Write-Host "Extracted version: $version"
-            echo "APP_VERSION=$version" >> $env:GITHUB_ENV
-            # Also create tag-friendly version
+            Add-Content -Path $env:GITHUB_ENV -Value "APP_VERSION=$version"
+            
+            # 创建符合 Tag 规范的版本号（下划线转连字符）
             $tagVersion = "v$version" -replace "_", "-"
-            echo "TAG_VERSION=$tagVersion" >> $env:GITHUB_ENV
+            Add-Content -Path $env:GITHUB_ENV -Value "TAG_VERSION=$tagVersion"
           } else {
             Write-Error "Could not read version from VERSION file"
             exit 1
