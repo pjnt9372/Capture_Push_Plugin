@@ -70,7 +70,7 @@ Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 ; 1. 生成配置文件（直接利用随包分发的虚拟环境）
-Filename: "{app}\.venv\Scripts\python.exe"; Parameters: """{app}\generate_config.py"" ""{app}"""; StatusMsg: "正在初始化配置..."; Flags: runhidden waituntilterminated
+Filename: "{app}\.venv\Scripts\python.exe"; Parameters: """{app}\generate_config.py"" ""{app}"" "; StatusMsg: "Initializing config..."; Flags: runhidden waituntilterminated
 
 ; 安装后选项
 Filename: "{app}\Capture_Push_tray.exe"; Description: "启动 Capture_Push 托盘程序"; Flags: nowait postinstall skipifsilent
