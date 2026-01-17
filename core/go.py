@@ -16,7 +16,7 @@ from core.push import send_grade_mail, send_schedule_mail, send_today_schedule_m
 from core.school import get_school_module
 
 # 导入统一配置路径管理（AppData 目录）
-from core.log import get_config_path, get_log_file_path, init_logger
+from core.log import get_config_path, get_log_file_path, init_logger, pack_logs
 
 # 初始化日志
 logger = init_logger('go')
@@ -450,6 +450,7 @@ def main():
     parser.add_argument("--push-today", action="store_true", help="推送今日课表")
     parser.add_argument("--push-tomorrow", action="store_true", help="推送明日课表")
     parser.add_argument("--push-next-week", action="store_true", help="推送下周全周课表")
+    parser.add_argument("--pack-logs", action="store_true", help="打包日志文件用于崩溃上报")
     parser.add_argument("--force", action="store_true", help="强制从网络更新，忽略循环检测")
     args = parser.parse_args()
     
@@ -483,6 +484,13 @@ def main():
     if args.push_next_week:
         logger.info("执行: fetch_and_push_next_week_schedule")
         fetch_and_push_next_week_schedule(force_update=args.force)
+    if args.pack_logs:
+        logger.info("执行: pack_logs")
+        report_path = pack_logs()
+        if report_path:
+            print(f"✅ 崩溃报告已生成: {report_path}")
+        else:
+            print("❌ 崩溃报告生成失败")
     
     logger.info("main() 执行完成")
 

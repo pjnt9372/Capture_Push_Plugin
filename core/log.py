@@ -10,7 +10,51 @@ import logging.handlers
 import sys
 import os
 import configparser
+import datetime
+import shutil
 from pathlib import Path
+
+
+def pack_logs():
+    """
+    将 AppData 中的日志目录打包成一个文本文件。
+    返回打包文件的路径。
+    """
+    try:
+        localappdata = os.environ.get('LOCALAPPDATA')
+        if not localappdata:
+            raise RuntimeError("无法获取 LOCALAPPDATA 环境变量")
+        
+        log_dir = Path(localappdata) / 'Capture_Push'
+        if not log_dir.exists():
+            raise FileNotFoundError(f"日志目录不存在: {log_dir}")
+        
+        # 确定输出文件名和路径
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        archive_name = f"capture_push_crash_report_{timestamp}.txt"
+        archive_path = log_dir / archive_name
+
+        with open(archive_path, 'w', encoding='utf-8') as archive_file:
+            archive_file.write(f"Capture_Push 崩溃报告 - 生成时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            archive_file.write("=" * 80 + "\n\n")
+
+            # 遍历日志目录，查找所有 .log 文件
+            for log_file_path in log_dir.glob("*.log"):
+                if log_file_path == archive_path:  # 跳过当前正在写的归档文件
+                    continue
+                archive_file.write(f"文件: {log_file_path.name}\n")
+                archive_file.write("-" * 40 + "\n")
+                try:
+                    with open(log_file_path, 'r', encoding='utf-8') as f:
+                        archive_file.write(f.read())
+                except Exception as e:
+                    archive_file.write(f"读取文件失败: {e}\n")
+                archive_file.write("\n" + "-" * 40 + "\n\n")
+
+        return str(archive_path)
+    except Exception as e:
+        print(f"打包日志失败: {e}")
+        return None
 
 
 def get_config_path():

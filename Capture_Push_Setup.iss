@@ -6,6 +6,7 @@
 #expr FileClose(FileHandle)
 
 [Setup]
+AppId={{D8C9E6B5-F7A1-4B9D-8E2C-5A3D1C0B2A9E}}
 AppName=Capture_Push
 AppVersion={#AppVersion}
 AppPublisher=pjnt9372
@@ -20,6 +21,7 @@ PrivilegesRequired=admin
 WizardStyle=modern
 AppMutex=Capture_PushTrayAppMutex
 CloseApplications=yes
+UsePreviousAppDir=yes
 SetupIconFile=
 UninstallDisplayIcon={app}\Capture_Push_tray.exe
 
@@ -111,14 +113,32 @@ end;
 
 // 虚拟环境打包模式下，[Code] 段逻辑基本可以精简
 function InitializeSetup(): Boolean;
+var
+  OldVersion: string;
 begin
   Result := True;
-  MsgBox('Capture_Push 安装程序' + #13#10 + #13#10 + 
-         '✓ 预构建环境：Python 虚拟环境已包含' + #13#10 +
-         '✓ 即装即用：无需下载 Python 或安装依赖' + #13#10 +
-         '✓ 环境隔离：不污染系统环境' + #13#10 + #13#10 + 
-         '点击"下一步"开始解压安装', 
-         mbInformation, MB_OK);
+  
+  // 检查是否已经安装（通过注册表获取旧版本号）
+  if RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{D8C9E6B5-F7A1-4B9D-8E2C-5A3D1C0B2A9E}_is1', 'DisplayVersion', OldVersion) then
+  begin
+    // 如果检测到旧版本
+    if MsgBox('检测到系统已安装 Capture_Push (版本: ' + OldVersion + ')。' + #13#10 + #13#10 +
+              '安装程序将更新核心程序文件，您的配置文件 (config.ini) 将会被保留。' + #13#10 + #13#10 +
+              '是否继续更新？', mbInformation, MB_YESNO) = IDNO then
+    begin
+      Result := False;
+    end;
+  end
+  else
+  begin
+    // 首次安装提示
+    MsgBox('欢迎使用 Capture_Push 安装程序' + #13#10 + #13#10 + 
+           '✓ 预构建环境：Python 嵌入式环境已包含' + #13#10 +
+           '✓ 即装即用：无需下载 Python 或安装依赖' + #13#10 +
+           '✓ 环境隔离：不污染系统环境' + #13#10 + #13#10 + 
+           '点击"下一步"开始解压安装', 
+           mbInformation, MB_OK);
+  end;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
