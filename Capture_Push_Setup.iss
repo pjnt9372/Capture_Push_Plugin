@@ -76,7 +76,10 @@ Root: HKLM64; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType
 ; 1. 生成配置文件（直接利用随包分发的嵌入式 Python）
 Filename: "{app}\.venv\python.exe"; Parameters: """{app}\generate_config.py"" ""{app}"""; StatusMsg: "Initializing config..."; Flags: runhidden waituntilterminated
 
-; 安装后选项
+; 自动重新启动托盘程序（仅针对静默安装/自动更新场景）
+Filename: "{app}\Capture_Push_tray.exe"; Flags: nowait; Check: WizardSilent
+
+; 安装后选项（针对普通交互式安装场景）
 Filename: "{app}\Capture_Push_tray.exe"; Description: "启动 Capture_Push 托盘程序"; Flags: nowait postinstall skipifsilent
 Filename: "{app}\.venv\pythonw.exe"; Parameters: """{app}\gui\gui.py"""; Description: "打开配置工具"; Flags: nowait postinstall skipifsilent unchecked
 

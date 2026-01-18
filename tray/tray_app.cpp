@@ -60,12 +60,14 @@ std::mutex g_log_mutex;
 // 函数前向声明
 std::string GetInstallPathFromRegistry();
 std::string GetExecutableDirectory();
+std::string GetLogDirectory();
 void ExecutePythonCommand(const std::string& command_suffix);
 void ExecuteConfigGui();
 void EditConfigFile();
 void InitLogging();
 void CloseLogging();
 void LogMessage(const std::string& message);
+void CheckAndRotateLog(const std::string& logPath);
 
 // 检查是否已有同名进程在运行
 bool IsProcessRunning(const wchar_t* processName) {
@@ -146,12 +148,38 @@ std::string GetInstallPathFromRegistry() {
 void InitLogging() {
     std::string logDir = GetLogDirectory();
     if (logDir.empty()) return;
-    std::string logPath = logDir + "\\tray_app.log";  // 修复：使用正确的日志文件名
+    std::string logPath = logDir + "\\tray_app.log";
+    
+    // 启动时也检查一次大小
+    CheckAndRotateLog(logPath);
+    
     g_log_file.open(logPath, std::ios::out | std::ios::app);
     if (g_log_file.is_open()) {
         g_log_file << "\n--- Log session started at " 
                    << std::string(__DATE__) << " " << std::string(__TIME__) << " ---\n";
         g_log_file.flush();
+    }
+}
+
+// 检查并滚动日志文件（限制大小）
+void CheckAndRotateLog(const std::string& logPath) {
+    const long MAX_LOG_SIZE = 2 * 1024 * 1024; // 2MB 上限
+    
+    std::ifstream file(logPath, std::ios::binary | std::ios::ate);
+    if (file.is_open()) {
+        long size = (long)file.tellg();
+        file.close();
+        
+        if (size > MAX_LOG_SIZE) {
+            if (g_log_file.is_open()) g_log_file.close();
+            
+            std::string oldLogPath = logPath + ".old";
+            DeleteFileA(oldLogPath.c_str());
+            MoveFileA(logPath.c_str(), oldLogPath.c_str());
+            
+            // 如果 g_log_file 之前是打开的，重新以追加模式打开（此时文件已是新的）
+            // 注意：InitLogging 之后调用时需要处理 reopen
+        }
     }
 }
 
@@ -189,6 +217,26 @@ void LogMessage(const std::string& message) {
     // 写入日志文件
     if (g_log_file.is_open()) {
         std::lock_guard<std::mutex> lock(g_log_mutex);
+        
+        // 检查文件大小并自动滚动
+        std::string logDir = GetLogDirectory();
+        std::string logPath = logDir + "\\tray_app.log";
+        
+        // 我们通过 tellp 获取当前流位置作为大小参考
+        long current_pos = (long)g_log_file.tellp();
+        const long MAX_LOG_SIZE = 2 * 1024 * 1024; // 2MB
+        
+        if (current_pos > MAX_LOG_SIZE) {
+            g_log_file.close();
+            
+            std::string oldLogPath = logPath + ".old";
+            DeleteFileA(oldLogPath.c_str());
+            MoveFileA(logPath.c_str(), oldLogPath.c_str());
+            
+            g_log_file.open(logPath, std::ios::out | std::ios::app);
+            g_log_file << "--- Log rotated due to size limit ---\n";
+        }
+
         g_log_file << log_line << '\n';
         g_log_file.flush();
     }

@@ -764,6 +764,25 @@ class ConfigWindow(QWidget):
             }
         """)
         update_btn.clicked.connect(self.check_for_updates)
+        
+        # 崩溃上报按钮
+        crash_report_btn = QPushButton("崩溃上报")
+        crash_report_btn.setCursor(Qt.PointingHandCursor)
+        crash_report_btn.setStyleSheet("""
+            QPushButton {
+                border: 1px solid #d83b01;
+                color: #d83b01;
+                padding: 5px 15px;
+                border-radius: 3px;
+                background: white;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background: #d83b01;
+                color: white;
+            }
+        """)
+        crash_report_btn.clicked.connect(self.send_crash_report)
 
         # 其他信息
         author_label = QLabel("开发者: pjnt9372")
@@ -776,7 +795,14 @@ class ConfigWindow(QWidget):
         layout.addWidget(desc_label)
         layout.addWidget(github_btn)
         layout.addSpacing(10)
-        layout.addWidget(update_btn)
+        
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_row.addWidget(update_btn)
+        btn_row.addWidget(crash_report_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+        
         layout.addSpacing(20)
         layout.addWidget(author_label)
         layout.addStretch()
@@ -996,6 +1022,26 @@ class ConfigWindow(QWidget):
                 
         except Exception as e:
             QMessageBox.critical(self, "错误", f"检查更新时出错：\n{str(e)}")
+
+    def send_crash_report(self):
+        """发送崩溃报告"""
+        reply = QMessageBox.question(
+            self,
+            "崩溃上报",
+            "是否要打包所有日志文件并生成崩溃报告？\n\n报告将保存在您的桌面或 AppData 目录中。",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                from core.log import pack_logs
+                report_path = pack_logs()
+                if report_path:
+                    QMessageBox.information(self, "成功", f"崩溃报告已生成：\n{report_path}")
+                else:
+                    QMessageBox.warning(self, "失败", "日志文件打包失败，请检查程序是否具有写入权限。")
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"生成报告时发生异常：\n{str(e)}")
 
     def closeEvent(self, event):
         """主窗口关闭事件：检查是否有子窗口未关闭"""
