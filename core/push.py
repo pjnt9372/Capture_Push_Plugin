@@ -90,7 +90,7 @@ class NotificationManager:
         
         # 注册飞书推送
         try:
-            from senders.feishu_sender import FeishuSender
+            from core.senders.feishu_sender import FeishuSender
             self.register_sender("feishu", FeishuSender())
         except Exception as e:
             logger.warning(f"注册飞书发送器失败: {e}")

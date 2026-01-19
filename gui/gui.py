@@ -661,17 +661,14 @@ class ConfigWindow(QWidget):
         self.push_none_radio = QRadioButton("不启用推送")
         self.push_email_radio = QRadioButton("邮件推送")
         self.push_feishu_radio = QRadioButton("飞书机器人推送")
-        self.push_test1_radio = QRadioButton("TEST1 (测试方式)")
         
         self.push_button_group.addButton(self.push_none_radio, 0)
         self.push_button_group.addButton(self.push_email_radio, 1)
         self.push_button_group.addButton(self.push_feishu_radio, 2)
-        self.push_button_group.addButton(self.push_test1_radio, 3)
         
         method_layout.addWidget(self.push_none_radio)
         method_layout.addWidget(self.push_email_radio)
         method_layout.addWidget(self.push_feishu_radio)
-        method_layout.addWidget(self.push_test1_radio)
         layout.addWidget(method_group)
 
         # 邮件配置
@@ -696,16 +693,6 @@ class ConfigWindow(QWidget):
         self.feishu_webhook = QLineEdit()
         feishu_form.addRow("Webhook URL", self.feishu_webhook)
         layout.addWidget(feishu_group)
-
-        # TEST1 组
-        test1_group = QGroupBox("TEST1 测试组")
-        test1_lay = QHBoxLayout(test1_group)
-        self.test1_btn = QPushButton("发送测试消息")
-        self.test1_btn.clicked.connect(self.send_test_push)
-        self.test1_status = QLabel("状态: 待命")
-        test1_lay.addWidget(self.test1_btn)
-        test1_lay.addWidget(self.test1_status)
-        layout.addWidget(test1_group)
 
         layout.addStretch()
         return tab
@@ -843,7 +830,6 @@ class ConfigWindow(QWidget):
         method = self.cfg.get("push", "method", fallback="none").lower()
         if method == "email": self.push_email_radio.setChecked(True)
         elif method == "feishu": self.push_feishu_radio.setChecked(True)
-        elif method == "test1": self.push_test1_radio.setChecked(True)
         else: self.push_none_radio.setChecked(True)
 
         # 详细配置
@@ -887,7 +873,6 @@ class ConfigWindow(QWidget):
         if "push" not in self.cfg: self.cfg["push"] = {}
         if self.push_email_radio.isChecked(): self.cfg["push"]["method"] = "email"
         elif self.push_feishu_radio.isChecked(): self.cfg["push"]["method"] = "feishu"
-        elif self.push_test1_radio.isChecked(): self.cfg["push"]["method"] = "test1"
         else: self.cfg["push"]["method"] = "none"
 
         if "email" not in self.cfg: self.cfg["email"] = {}

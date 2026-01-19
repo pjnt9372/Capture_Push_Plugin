@@ -159,6 +159,7 @@ def save_last_schedule_day(day_str):
 def calc_week_and_weekday(first_monday):
     today = datetime.date.today()
     delta = (today - first_monday).days
+    logger.debug(f"日期计算: today={today}, first_monday={first_monday}, delta={delta}")
     if delta < 0:
         return None, None
     week = delta // 7 + 1
@@ -182,8 +183,13 @@ def fetch_and_push_today_schedule(force_update=False):
         cfg = load_config()
         username = cfg.get("account", "username")
         password = cfg.get("account", "password")
+        first_monday_str = cfg.get("semester", "first_monday", fallback="").strip()
+        if not first_monday_str:
+            logger.warning("配置文件中未设置第一周周一 (first_monday)")
+            return
+            
         first_monday = datetime.datetime.strptime(
-            cfg.get("semester", "first_monday"), "%Y-%m-%d"
+            first_monday_str, "%Y-%m-%d"
         ).date()
 
         today = datetime.date.today()
@@ -268,8 +274,13 @@ def fetch_and_push_tomorrow_schedule(force_update=False):
         cfg = load_config()
         username = cfg.get("account", "username")
         password = cfg.get("account", "password")
+        first_monday_str = cfg.get("semester", "first_monday", fallback="").strip()
+        if not first_monday_str:
+            logger.warning("配置文件中未设置第一周周一 (first_monday)")
+            return
+            
         first_monday = datetime.datetime.strptime(
-            cfg.get("semester", "first_monday"), "%Y-%m-%d"
+            first_monday_str, "%Y-%m-%d"
         ).date()
 
         tomorrow = datetime.date.today() + datetime.timedelta(days=1)
@@ -350,8 +361,13 @@ def fetch_and_push_next_week_schedule(force_update=False):
         cfg = load_config()
         username = cfg.get("account", "username")
         password = cfg.get("account", "password")
+        first_monday_str = cfg.get("semester", "first_monday", fallback="").strip()
+        if not first_monday_str:
+            logger.warning("配置文件中未设置第一周周一 (first_monday)")
+            return
+            
         first_monday = datetime.datetime.strptime(
-            cfg.get("semester", "first_monday"), "%Y-%m-%d"
+            first_monday_str, "%Y-%m-%d"
         ).date()
 
         # 计算下周周一的周次
