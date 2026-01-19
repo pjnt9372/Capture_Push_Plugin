@@ -88,7 +88,7 @@ def fetch_and_push_grades(push=False, force_update=False, push_all=False):
         force_update: 是否强制从网络更新（忽略循环检测）
         push_all: 是否推送所有成绩（忽略变化检测）
     """
-    logger.info(f"fetch_and_push_grades 开始: push={push}, force_update={force_update}, push_all={push_all}")
+    logger.info(f"fetch_and_push_grades 被调用: push={push}, force_update={force_update}, push_all={push_all}")
     try:
         cfg = load_config()
         username = cfg.get("account", "username")
@@ -159,6 +159,7 @@ def save_last_schedule_day(day_str):
 def calc_week_and_weekday(first_monday):
     today = datetime.date.today()
     delta = (today - first_monday).days
+    logger.debug(f"日期计算: today={today}, first_monday={first_monday}, delta={delta}")
     if delta < 0:
         return None, None
     week = delta // 7 + 1
@@ -178,12 +179,18 @@ def load_manual_schedule():
 
 def fetch_and_push_today_schedule(force_update=False):
     """获取并推送今日课表"""
+    logger.info(f"fetch_and_push_today_schedule 被调用: force_update={force_update}")
     try:
         cfg = load_config()
         username = cfg.get("account", "username")
         password = cfg.get("account", "password")
+        first_monday_str = cfg.get("semester", "first_monday", fallback="").strip()
+        if not first_monday_str:
+            logger.warning("配置文件中未设置第一周周一 (first_monday)")
+            return
+            
         first_monday = datetime.datetime.strptime(
-            cfg.get("semester", "first_monday"), "%Y-%m-%d"
+            first_monday_str, "%Y-%m-%d"
         ).date()
 
         today = datetime.date.today()
@@ -264,12 +271,18 @@ def fetch_and_push_today_schedule(force_update=False):
 
 def fetch_and_push_tomorrow_schedule(force_update=False):
     """获取并推送明日课表"""
+    logger.info(f"fetch_and_push_tomorrow_schedule 被调用: force_update={force_update}")
     try:
         cfg = load_config()
         username = cfg.get("account", "username")
         password = cfg.get("account", "password")
+        first_monday_str = cfg.get("semester", "first_monday", fallback="").strip()
+        if not first_monday_str:
+            logger.warning("配置文件中未设置第一周周一 (first_monday)")
+            return
+            
         first_monday = datetime.datetime.strptime(
-            cfg.get("semester", "first_monday"), "%Y-%m-%d"
+            first_monday_str, "%Y-%m-%d"
         ).date()
 
         tomorrow = datetime.date.today() + datetime.timedelta(days=1)
@@ -346,12 +359,18 @@ def fetch_and_push_tomorrow_schedule(force_update=False):
 
 def fetch_and_push_next_week_schedule(force_update=False):
     """获取并推送下周全周课表"""
+    logger.info(f"fetch_and_push_next_week_schedule 被调用: force_update={force_update}")
     try:
         cfg = load_config()
         username = cfg.get("account", "username")
         password = cfg.get("account", "password")
+        first_monday_str = cfg.get("semester", "first_monday", fallback="").strip()
+        if not first_monday_str:
+            logger.warning("配置文件中未设置第一周周一 (first_monday)")
+            return
+            
         first_monday = datetime.datetime.strptime(
-            cfg.get("semester", "first_monday"), "%Y-%m-%d"
+            first_monday_str, "%Y-%m-%d"
         ).date()
 
         # 计算下周周一的周次

@@ -58,6 +58,14 @@ Root: HKLM64; Subkey: "SOFTWARE\Capture_Push"; ValueType: string; ValueName: "In
 ; 自启动托盘程序保持不变
 Root: HKLM64; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Capture_Push_Tray"; ValueData: """{app}\Capture_Push_tray.exe"""; Flags: uninsdeletevalue dontcreatekey
 
+[Run]
+; 自动重新启动托盘程序（仅针对静默安装/自动更新场景）
+Filename: "{app}\Capture_Push_tray.exe"; Flags: nowait; Check: WizardSilent
+
+; 安装后选项（针对普通交互式安装场景）
+Filename: "{app}\Capture_Push_tray.exe"; Description: "启动 Capture_Push 托盘程序"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\.venv\pythonw.exe"; Parameters: """{app}\gui\gui.py"""; Description: "打开配置工具"; Flags: nowait postinstall skipifsilent unchecked
+
 [Code]
 var
   PythonEnvExists: Boolean;

@@ -139,11 +139,18 @@ class GradesViewerWindow(QWidget):
         
         layout.addWidget(self.table)
         
-        # 底部按钮区（清除缓存）
+        # 底部按钮区（刷新与清除）
         bottom_layout = QHBoxLayout()
+        
+        refresh_btn = QPushButton("刷新成绩 (从网络获取)")
+        refresh_btn.setStyleSheet("background-color: #0078d4; color: white; font-weight: bold;")
+        refresh_btn.clicked.connect(self.refresh_data)
+        
         clear_btn = QPushButton("清除成绩缓存")
         clear_btn.setStyleSheet("color: #d83b01; font-weight: bold;")
         clear_btn.clicked.connect(self.clear_grade_cache)
+        
+        bottom_layout.addWidget(refresh_btn)
         bottom_layout.addStretch()
         bottom_layout.addWidget(clear_btn)
         layout.addLayout(bottom_layout)
@@ -155,6 +162,37 @@ class GradesViewerWindow(QWidget):
         self.table.setFont(font)
 
         self.load_data()
+
+    def refresh_data(self):
+        """手动触发网络刷新"""
+        import subprocess
+        # 禁用按钮防止重复点击
+        sender = self.sender()
+        if sender: sender.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        
+        try:
+            # 获取 pythonw.exe 路径
+            exe_dir = Path(sys.executable).parent
+            if (exe_dir / "pythonw.exe").exists():
+                py_exe = str(exe_dir / "pythonw.exe")
+            else:
+                py_exe = sys.executable
+                
+            go_script = str(BASE_DIR / "core" / "go.py")
+            
+            # 使用 subprocess 运行
+            CREATE_NO_WINDOW = 0x08000000
+            subprocess.Popen([py_exe, go_script, "--fetch-grade", "--force"], 
+                            creationflags=CREATE_NO_WINDOW).wait()
+            
+            self.load_data()
+            QMessageBox.information(self, "刷新完成", "成绩数据已从网络同步。")
+        except Exception as e:
+            QMessageBox.critical(self, "刷新失败", f"无法执行刷新脚本：{e}")
+        finally:
+            QApplication.restoreOverrideCursor()
+            if sender: sender.setEnabled(True)
 
     def load_data(self):
         try:
@@ -350,11 +388,18 @@ class ScheduleViewerWindow(QWidget):
 
         layout.addWidget(self.table)
         
-        # 底部按钮区（添加清除缓存）
+        # 底部按钮区（添加刷新和清除）
         bottom_layout = QHBoxLayout()
+        
+        refresh_btn = QPushButton("刷新课表 (从网络获取)")
+        refresh_btn.setStyleSheet("background-color: #0078d4; color: white; font-weight: bold;")
+        refresh_btn.clicked.connect(self.refresh_data)
+        
         clear_btn = QPushButton("清除课表数据 (含手动修改)")
         clear_btn.setStyleSheet("color: #d83b01; font-weight: bold;")
         clear_btn.clicked.connect(self.clear_schedule_cache)
+        
+        bottom_layout.addWidget(refresh_btn)
         bottom_layout.addStretch()
         bottom_layout.addWidget(clear_btn)
         layout.addLayout(bottom_layout)
@@ -436,6 +481,35 @@ class ScheduleViewerWindow(QWidget):
                 self.load_data()
             except Exception as e:
                 QMessageBox.critical(self, "失败", f"清除失败：{e}")
+
+    def refresh_data(self):
+        """手动触发网络刷新"""
+        import subprocess
+        # 禁用按钮防止重复点击
+        sender = self.sender()
+        if sender: sender.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        
+        try:
+            exe_dir = Path(sys.executable).parent
+            if (exe_dir / "pythonw.exe").exists():
+                py_exe = str(exe_dir / "pythonw.exe")
+            else:
+                py_exe = sys.executable
+                
+            go_script = str(BASE_DIR / "core" / "go.py")
+            
+            CREATE_NO_WINDOW = 0x08000000
+            subprocess.Popen([py_exe, go_script, "--fetch-schedule", "--force"], 
+                            creationflags=CREATE_NO_WINDOW).wait()
+            
+            self.load_data()
+            QMessageBox.information(self, "刷新完成", "课表数据已从网络同步。")
+        except Exception as e:
+            QMessageBox.critical(self, "刷新失败", f"无法执行刷新脚本：{e}")
+        finally:
+            QApplication.restoreOverrideCursor()
+            if sender: sender.setEnabled(True)
 
     def load_data(self):
         try:
@@ -661,17 +735,14 @@ class ConfigWindow(QWidget):
         self.push_none_radio = QRadioButton("不启用推送")
         self.push_email_radio = QRadioButton("邮件推送")
         self.push_feishu_radio = QRadioButton("飞书机器人推送")
-        self.push_test1_radio = QRadioButton("TEST1 (测试方式)")
         
         self.push_button_group.addButton(self.push_none_radio, 0)
         self.push_button_group.addButton(self.push_email_radio, 1)
         self.push_button_group.addButton(self.push_feishu_radio, 2)
-        self.push_button_group.addButton(self.push_test1_radio, 3)
         
         method_layout.addWidget(self.push_none_radio)
         method_layout.addWidget(self.push_email_radio)
         method_layout.addWidget(self.push_feishu_radio)
-        method_layout.addWidget(self.push_test1_radio)
         layout.addWidget(method_group)
 
         # 邮件配置
@@ -696,16 +767,6 @@ class ConfigWindow(QWidget):
         self.feishu_webhook = QLineEdit()
         feishu_form.addRow("Webhook URL", self.feishu_webhook)
         layout.addWidget(feishu_group)
-
-        # TEST1 组
-        test1_group = QGroupBox("TEST1 测试组")
-        test1_lay = QHBoxLayout(test1_group)
-        self.test1_btn = QPushButton("发送测试消息")
-        self.test1_btn.clicked.connect(self.send_test_push)
-        self.test1_status = QLabel("状态: 待命")
-        test1_lay.addWidget(self.test1_btn)
-        test1_lay.addWidget(self.test1_status)
-        layout.addWidget(test1_group)
 
         layout.addStretch()
         return tab
@@ -764,6 +825,25 @@ class ConfigWindow(QWidget):
             }
         """)
         update_btn.clicked.connect(self.check_for_updates)
+        
+        # 崩溃上报按钮
+        crash_report_btn = QPushButton("崩溃上报")
+        crash_report_btn.setCursor(Qt.PointingHandCursor)
+        crash_report_btn.setStyleSheet("""
+            QPushButton {
+                border: 1px solid #d83b01;
+                color: #d83b01;
+                padding: 5px 15px;
+                border-radius: 3px;
+                background: white;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background: #d83b01;
+                color: white;
+            }
+        """)
+        crash_report_btn.clicked.connect(self.send_crash_report)
 
         # 其他信息
         author_label = QLabel("开发者: pjnt9372")
@@ -776,7 +856,14 @@ class ConfigWindow(QWidget):
         layout.addWidget(desc_label)
         layout.addWidget(github_btn)
         layout.addSpacing(10)
-        layout.addWidget(update_btn)
+        
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_row.addWidget(update_btn)
+        btn_row.addWidget(crash_report_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+        
         layout.addSpacing(20)
         layout.addWidget(author_label)
         layout.addStretch()
@@ -817,7 +904,6 @@ class ConfigWindow(QWidget):
         method = self.cfg.get("push", "method", fallback="none").lower()
         if method == "email": self.push_email_radio.setChecked(True)
         elif method == "feishu": self.push_feishu_radio.setChecked(True)
-        elif method == "test1": self.push_test1_radio.setChecked(True)
         else: self.push_none_radio.setChecked(True)
 
         # 详细配置
@@ -861,7 +947,6 @@ class ConfigWindow(QWidget):
         if "push" not in self.cfg: self.cfg["push"] = {}
         if self.push_email_radio.isChecked(): self.cfg["push"]["method"] = "email"
         elif self.push_feishu_radio.isChecked(): self.cfg["push"]["method"] = "feishu"
-        elif self.push_test1_radio.isChecked(): self.cfg["push"]["method"] = "test1"
         else: self.cfg["push"]["method"] = "none"
 
         if "email" not in self.cfg: self.cfg["email"] = {}
@@ -996,6 +1081,26 @@ class ConfigWindow(QWidget):
                 
         except Exception as e:
             QMessageBox.critical(self, "错误", f"检查更新时出错：\n{str(e)}")
+
+    def send_crash_report(self):
+        """发送崩溃报告"""
+        reply = QMessageBox.question(
+            self,
+            "崩溃上报",
+            "是否要打包所有日志文件并生成崩溃报告？\n\n报告将保存在您的桌面或 AppData 目录中。",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                from core.log import pack_logs
+                report_path = pack_logs()
+                if report_path:
+                    QMessageBox.information(self, "成功", f"崩溃报告已生成：\n{report_path}")
+                else:
+                    QMessageBox.warning(self, "失败", "日志文件打包失败，请检查程序是否具有写入权限。")
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"生成报告时发生异常：\n{str(e)}")
 
     def closeEvent(self, event):
         """主窗口关闭事件：检查是否有子窗口未关闭"""

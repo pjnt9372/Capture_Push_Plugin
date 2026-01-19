@@ -34,21 +34,10 @@ Capture_Push 是一个课程成绩和课表自动追踪推送系统，能够自�
 - **动态加载**：系统根据配置自动加载对应的院校模块
 - **统一接口**：所有院校模块遵循统一的API接口标准
 
-### 开发新院校
-要在系统中添加一所新学校（例如：代码为`23333`的“示例大学”），请按以下步骤操作：
+### 开发新院校,以及新的操作模块
 
-1. **创建目录**：在 `core/school/` 目录下创建以该校代码命名的文件夹，如 `core/school/23333/`
-2. **实现模块**：在新建的文件夹内，创建 `getCourseGrades.py` 和 `getCourseSchedule.py` 两个文件。
-   - `getCourseGrades.py`：需实现 `fetch_grades(username, password, force_update=False)` 和 `parse_grades(html)` 方法。
-   - `getCourseSchedule.py`：需实现 `fetch_course_schedule(username, password, force_update=False)` 和 `parse_schedule(html)` 方法。
-3. **创建元数据**：在 `core/school/23333/` 目录下创建 `__init__.py` 文件，并定义 `SCHOOL_NAME` 和 `SCHOOL_CODE` 常量，例如：
-   ```python
-   SCHOOL_NAME = "示例大学"
-   SCHOOL_CODE = "23333"
-   from .getCourseGrades import fetch_grades, parse_grades
-   from .getCourseSchedule import fetch_course_schedule, parse_schedule
-   ```
-4. **测试**：在GUI的“基本配置”中，从院校选择下拉框中选择“示例大学”，然后进行测试。
+请参阅[开发指南](developer_tools/EXTENSION_GUIDE.md)
+
 
 ## 技术特性
 
@@ -109,27 +98,37 @@ source .venv/bin/activate      # Unix
 uv pip install -r requirements.txt
 ```
 
-### 使用标准 Python 工具
-```bash
-# 创建虚拟环境
-python -m venv .venv
+### 构建与打包
 
-# 激活虚拟环境
-.venv\Scripts\activate  # Windows
-# 或
-source .venv/bin/activate  # Unix
+如果你需要修改 C++ 托盘程序或重新打包程序：
 
-# 安装依赖
-pip install -r requirements.txt
-```
+1. **构建 C++ 托盘程序**
+   ```bash
+   cd tray
+   # 重新配置项目 (Release 模式)
+   cmake -B build -G "Visual Studio 17 2022" -A x64
+   # 编译
+   cmake --build build --config Release
+   ```
+
+2. **准备打包环境**
+   运行脚本自动同步资源并准备隔离的构建空间：
+   ```bash
+   python developer_tools/build.py
+   ```
+
+3. **生成安装包**
+   使用 Inno Setup 编译 `build/` 目录下的脚本：
+   - 完整版：编译 `build\Capture_Push_Setup.iss`
+   - 轻量版：编译 `build\Capture_Push_Lite_Setup.iss`
 
 ## 部署与打包
 
-- 支持使用 PyInstaller 打包为独立可执行文件
-- 托盘程序使用 C++ 编写，性能优秀
-- 完整的安装程序打包支持（Inno Setup）
+- **隔离运行**：程序自带嵌入式 Python 运行时，不依赖系统环境。
+- **平滑更新**：支持覆盖安装，自动保留用户配置文件。
+- **双版本分发**：提供包含环境的完整版和仅包含程序的轻量版。
 
-## 日志文件位置
+## 日志与配置
 
-打包后程序的日志文件存储在：
-- `%LOCALAPPDATA%\GradeTracker` 
+程序运行产生的日志和配置文件存储在：
+- `%LOCALAPPDATA%\Capture_Push` 

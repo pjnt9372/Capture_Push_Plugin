@@ -79,18 +79,26 @@ class Updater:
         """
         比较版本号
         
+        v1: 远程版本 (最新)
+        v2: 本地版本 (当前)
+        
         Returns:
-            1 if v1 > v2
-            0 if v1 == v2
-            -1 if v1 < v2
+            1 if v1 > v2 (有更新)
+            0 if v1 == v2 (无更新)
+            -1 if v1 < v2 (当前版本更高)
         """
         try:
-            # 支持 . 或 _ 作为分隔符
-            v1_clean = v1.replace('_', '.')
-            v2_clean = v2.replace('_', '.')
+            # 1. 处理后缀 (Beta, Dev 等)
+            # 格式: x.x.x_xxxx
+            v1_parts = v1.split('_')
+            v2_parts = v2.split('_')
             
-            parts1 = [int(x) for x in v1_clean.split('.')]
-            parts2 = [int(x) for x in v2_clean.split('.')]
+            v1_base = v1_parts[0].replace('_', '.')
+            v2_base = v2_parts[0].replace('_', '.')
+            
+            # 2. 比较基础版本 (x.x.x)
+            parts1 = [int(x) for x in v1_base.split('.')]
+            parts2 = [int(x) for x in v2_base.split('.')]
             
             for p1, p2 in zip(parts1, parts2):
                 if p1 > p2:
@@ -102,6 +110,26 @@ class Updater:
                 return 1
             elif len(parts1) < len(parts2):
                 return -1
+            
+            # 3. 基础版本相同，比较后缀
+            # 规则: 
+            # - 无后缀 (正式版) > 有后缀 (Beta/Dev)
+            # - 有后缀时，按字母顺序比较 (Beta > Dev)
+            
+            # 情况 A: 远程是正式版，本地是预发布版 -> 升级
+            if len(v1_parts) == 1 and len(v2_parts) > 1:
+                return 1
+            
+            # 情况 B: 远程是预发布版，本地是正式版 -> 不升级 (回退)
+            if len(v1_parts) > 1 and len(v2_parts) == 1:
+                return -1
+            
+            # 情况 C: 两者都是预发布版 -> 比较后缀字符串
+            if len(v1_parts) > 1 and len(v2_parts) > 1:
+                if v1_parts[1] > v2_parts[1]:
+                    return 1
+                elif v1_parts[1] < v2_parts[1]:
+                    return -1
             
             return 0
         except Exception as e:

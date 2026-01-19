@@ -37,12 +37,19 @@ def main():
     venv_dir = build_dir / ".venv"
     requirements_file = project_root / "requirements.txt"
     
+    # 缓存目录配置
+    cache_dir = project_root / "developer_tools" / "build_cache"
+    cache_dir.mkdir(exist_ok=True)
+    
     # 嵌入式 Python 配置
     py_version = "3.11.9"
     py_url = f"https://www.python.org/ftp/python/{py_version}/python-{py_version}-embed-amd64.zip"
-    zip_path = build_dir / "python_embed.zip"
+    zip_path = cache_dir / f"python-{py_version}-embed-amd64.zip"
     get_pip_url = "https://bootstrap.pypa.io/get-pip.py"
     get_pip_path = venv_dir / "get-pip.py"
+    cached_get_pip = cache_dir / "get-pip.py"
+    pip_cache_dir = cache_dir / "pip_cache"
+    pip_cache_dir.mkdir(exist_ok=True)
 
     log("=" * 60)
     log(f"开始构建隔离环境 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -55,8 +62,10 @@ def main():
         build_dir.mkdir(parents=True)
     
     # 2. 准备便携式 Python 环境 (在 build 目录下)
+    # 如果 .venv 已存在且满足要求，尝试增量更新而不是全部删除
+    # 但为了确保 100% 隔离，这里依然保留逻辑，主要通过 pip 缓存加速
     if venv_dir.exists():
-        log(f"清理旧的 .venv 目录...")
+        log(f"发现已有 .venv，将进行清理以确保隔离环境纯净...")
         shutil.rmtree(venv_dir)
     venv_dir.mkdir(parents=True, exist_ok=True)
 
@@ -67,7 +76,7 @@ def main():
         except Exception as e:
             error(f"下载失败: {e}")
     else:
-        log("使用本地已存在的 python_embed.zip")
+        log(f"使用本地缓存的 Python 核心: {zip_path.name}")
 
     log("正在解压 Python 核心...")
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
@@ -83,14 +92,25 @@ def main():
             for line in lines:
                 f.write(line.replace("#import site", "import site"))
 
-    log("安装 pip...")
-    urllib.request.urlretrieve(get_pip_url, get_pip_path)
+    log("准备 pip...")
+    if not cached_get_pip.exists():
+        log("正在从远程下载 get-pip.py...")
+        urllib.request.urlretrieve(get_pip_url, cached_get_pip)
+    else:
+        log("使用本地缓存的 get-pip.py")
+    shutil.copy2(cached_get_pip, get_pip_path)
+    
     subprocess.run([str(venv_dir / "python.exe"), str(get_pip_path), "--no-warn-script-location"], cwd=venv_dir, check=True)
     os.remove(get_pip_path)
 
-    log("安装项目依赖...")
+    log("安装项目依赖 (使用本地缓存)...")
     if requirements_file.exists():
-        subprocess.run([str(venv_dir / "python.exe"), "-m", "pip", "install", "-r", str(requirements_file), "--no-warn-script-location"], cwd=venv_dir, check=True)
+        subprocess.run([
+            str(venv_dir / "python.exe"), "-m", "pip", "install", 
+            "-r", str(requirements_file), 
+            "--no-warn-script-location",
+            "--cache-dir", str(pip_cache_dir)
+        ], cwd=venv_dir, check=True)
     
     # 3. 同步源码到构建空间 (保持与仓库相同的相对结构，以便 .iss 无需修改即可运行)
     log("正在同步组件到构建空间...")
@@ -105,16 +125,22 @@ def main():
             shutil.copy2(src_f, build_dir / f_name)
             log(f"已同步: {f_name}")
 
-    # 4. 确保语言包资源存在 (如果仓库没有，则下载)
+    # 4. 确保语言包资源存在 (使用本地缓存)
+    cached_isl = cache_dir / "ChineseSimplified.isl"
     isl_file = build_dir / "ChineseSimplified.isl"
-    if not isl_file.exists():
+    
+    if not cached_isl.exists():
         isl_url = "https://raw.githubusercontent.com/kira-96/Inno-Setup-Chinese-Simplified-Translation/master/ChineseSimplified.isl"
-        log("正在从远程获取中文语言包...")
+        log("正在从远程获取中文语言包缓存...")
         try:
-            urllib.request.urlretrieve(isl_url, isl_file)
-            log("语言包拉取成功")
+            urllib.request.urlretrieve(isl_url, cached_isl)
+            log("语言包拉取并缓存成功")
         except Exception as e:
-            log(f"[!] 语言包拉取失败 (这可能导致打包报错): {e}")
+            log(f"[!] 语言包拉取失败: {e}")
+    
+    if cached_isl.exists():
+        shutil.copy2(cached_isl, isl_file)
+        log("已同步语言包到构建目录")
 
     # 5. 创建托盘程序的适配目录结构 (适配 .iss 中的 Source 路径)
     # .iss 默认路径: tray\build\Release\Capture_Push_tray.exe
