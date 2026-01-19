@@ -139,11 +139,18 @@ class GradesViewerWindow(QWidget):
         
         layout.addWidget(self.table)
         
-        # 底部按钮区（清除缓存）
+        # 底部按钮区（刷新与清除）
         bottom_layout = QHBoxLayout()
+        
+        refresh_btn = QPushButton("刷新成绩 (从网络获取)")
+        refresh_btn.setStyleSheet("background-color: #0078d4; color: white; font-weight: bold;")
+        refresh_btn.clicked.connect(self.refresh_data)
+        
         clear_btn = QPushButton("清除成绩缓存")
         clear_btn.setStyleSheet("color: #d83b01; font-weight: bold;")
         clear_btn.clicked.connect(self.clear_grade_cache)
+        
+        bottom_layout.addWidget(refresh_btn)
         bottom_layout.addStretch()
         bottom_layout.addWidget(clear_btn)
         layout.addLayout(bottom_layout)
@@ -155,6 +162,37 @@ class GradesViewerWindow(QWidget):
         self.table.setFont(font)
 
         self.load_data()
+
+    def refresh_data(self):
+        """手动触发网络刷新"""
+        import subprocess
+        # 禁用按钮防止重复点击
+        sender = self.sender()
+        if sender: sender.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        
+        try:
+            # 获取 pythonw.exe 路径
+            exe_dir = Path(sys.executable).parent
+            if (exe_dir / "pythonw.exe").exists():
+                py_exe = str(exe_dir / "pythonw.exe")
+            else:
+                py_exe = sys.executable
+                
+            go_script = str(BASE_DIR / "core" / "go.py")
+            
+            # 使用 subprocess 运行
+            CREATE_NO_WINDOW = 0x08000000
+            subprocess.Popen([py_exe, go_script, "--fetch-grade", "--force"], 
+                            creationflags=CREATE_NO_WINDOW).wait()
+            
+            self.load_data()
+            QMessageBox.information(self, "刷新完成", "成绩数据已从网络同步。")
+        except Exception as e:
+            QMessageBox.critical(self, "刷新失败", f"无法执行刷新脚本：{e}")
+        finally:
+            QApplication.restoreOverrideCursor()
+            if sender: sender.setEnabled(True)
 
     def load_data(self):
         try:
@@ -350,11 +388,18 @@ class ScheduleViewerWindow(QWidget):
 
         layout.addWidget(self.table)
         
-        # 底部按钮区（添加清除缓存）
+        # 底部按钮区（添加刷新和清除）
         bottom_layout = QHBoxLayout()
+        
+        refresh_btn = QPushButton("刷新课表 (从网络获取)")
+        refresh_btn.setStyleSheet("background-color: #0078d4; color: white; font-weight: bold;")
+        refresh_btn.clicked.connect(self.refresh_data)
+        
         clear_btn = QPushButton("清除课表数据 (含手动修改)")
         clear_btn.setStyleSheet("color: #d83b01; font-weight: bold;")
         clear_btn.clicked.connect(self.clear_schedule_cache)
+        
+        bottom_layout.addWidget(refresh_btn)
         bottom_layout.addStretch()
         bottom_layout.addWidget(clear_btn)
         layout.addLayout(bottom_layout)
@@ -436,6 +481,35 @@ class ScheduleViewerWindow(QWidget):
                 self.load_data()
             except Exception as e:
                 QMessageBox.critical(self, "失败", f"清除失败：{e}")
+
+    def refresh_data(self):
+        """手动触发网络刷新"""
+        import subprocess
+        # 禁用按钮防止重复点击
+        sender = self.sender()
+        if sender: sender.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        
+        try:
+            exe_dir = Path(sys.executable).parent
+            if (exe_dir / "pythonw.exe").exists():
+                py_exe = str(exe_dir / "pythonw.exe")
+            else:
+                py_exe = sys.executable
+                
+            go_script = str(BASE_DIR / "core" / "go.py")
+            
+            CREATE_NO_WINDOW = 0x08000000
+            subprocess.Popen([py_exe, go_script, "--fetch-schedule", "--force"], 
+                            creationflags=CREATE_NO_WINDOW).wait()
+            
+            self.load_data()
+            QMessageBox.information(self, "刷新完成", "课表数据已从网络同步。")
+        except Exception as e:
+            QMessageBox.critical(self, "刷新失败", f"无法执行刷新脚本：{e}")
+        finally:
+            QApplication.restoreOverrideCursor()
+            if sender: sender.setEnabled(True)
 
     def load_data(self):
         try:

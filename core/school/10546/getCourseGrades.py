@@ -171,26 +171,37 @@ def get_grade_html(session, force_update=False):
     """获取成绩HTML，支持循环检测。所有文件存储在 AppData 目录。"""
     cache_file = APPDATA_DIR / "grade.html"
     
-    if RUN_MODE == 'DEV':
-        logger.info(f"[DEV 模式] 从 AppData 文件读取成绩数据: {cache_file}")
-        try:
-            with open(cache_file, "r", encoding="utf-8") as f:
-                return f.read()
-        except FileNotFoundError:
-            logger.error(f"未找到 {cache_file}，请先在 BUILD 模式运行生成")
-            return None
-        except Exception as e:
-            logger.error(f"读取 {cache_file} 失败: {e}")
-            return None
+    logger.info(f"get_grade_html 被调用, force_update={force_update}, RUN_MODE={RUN_MODE}")
+
+    if force_update:
+        logger.info("强制更新模式：将忽略缓存并尝试从网络获取最新成绩")
+    else:
+        # 1. DEV 模式下的缓存处理
+        if RUN_MODE == 'DEV':
+            logger.info(f"[DEV 模式] 从 AppData 文件读取成绩数据: {cache_file}")
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    return f.read()
+            except FileNotFoundError:
+                logger.error(f"未找到 {cache_file}，请先在 BUILD 模式运行生成")
+                return None
+            except Exception as e:
+                logger.error(f"读取 {cache_file} 失败: {e}")
+                return None
+        
+        # 2. 检查是否需要更新（基于时间间隔）
+        if not should_update_grades():
+            logger.info("未达到更新间隔，将使用本地缓存的成绩数据")
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    return f.read()
+            except Exception as e:
+                logger.warning(f"读取本地缓存失败: {e}，将回退到网络获取")
     
-    # 检查是否需要更新
-    if not force_update and not should_update_grades():
-        logger.info("使用本地缓存的成绩数据")
-        try:
-            with open(cache_file, "r", encoding="utf-8") as f:
-                return f.read()
-        except Exception as e:
-            logger.warning(f"读取本地缓存失败: {e}，将从网络获取")
+    # 3. 从网络获取
+    if RUN_MODE == 'DEV' and not force_update:
+        # 兜底逻辑：DEV 模式下如果没有 force_update 且没读取到缓存，不应尝试网络请求（除非明确要求）
+        return None
     
     # 从网络获取
     logger.info("开始从网络请求成绩页面")

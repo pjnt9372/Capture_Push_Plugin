@@ -12,6 +12,7 @@ __pycache__/
 .idea/
 .vscode/
 build/
+developer_tools/build_cache
 
 # Logs
 app.log
