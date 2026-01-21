@@ -16,26 +16,14 @@
 #include <Shlobj.h>   // for SHGetKnownFolderPath
 #include <tlhelp32.h> // for process enumeration
 
-#pragma comment(lib, "user32.lib")
-#pragma comment(lib, "shell32.lib")
-#pragma comment(lib, "ole32.lib")  // for CoTaskMemFree
-#pragma comment(lib, "advapi32.lib")  // for registry functions
+// Define version and product name macros (fallback if not defined by CMake)
+#ifndef APP_VERSION
+#define APP_VERSION "0.0.0"  // Default fallback version
+#endif
 
-#define WM_TRAYICON (WM_USER + 1)
-#define WM_LOOP_TIMER (WM_USER + 2)
-#define ID_MENU_GRADE_CHANGED 1001
-#define ID_MENU_GRADE_ALL 1002
-#define ID_MENU_REFRESH_GRADE 1003
-#define ID_MENU_SCHEDULE_TODAY 1004
-#define ID_MENU_SCHEDULE_TOMORROW 1005
-#define ID_MENU_SCHEDULE_FULL 1006
-#define ID_MENU_REFRESH_SCHEDULE 1007
-#define ID_MENU_SEND_CRASH_REPORT 1008
-#define ID_MENU_CHECK_UPDATE 1009
-#define ID_MENU_EXIT 1010
-#define ID_MENU_OPEN_CONFIG 1011
-#define ID_MENU_EDIT_CONFIG 1012
-#define TIMER_LOOP_CHECK 1001
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+#define PRODUCT_NAME L"Capture_Push 托盘程序"
 
 NOTIFYICONDATAW nid;
 HWND hwnd;
@@ -156,7 +144,8 @@ void InitLogging() {
     g_log_file.open(logPath, std::ios::out | std::ios::app);
     if (g_log_file.is_open()) {
         g_log_file << "\n--- Log session started at " 
-                   << std::string(__DATE__) << " " << std::string(__TIME__) << " ---\n";
+                   << std::string(__DATE__) << " " << std::string(__TIME__);
+        g_log_file << " | Version: " << APP_VERSION << " ---\n"; // Log version at startup
         g_log_file.flush();
     }
 }
@@ -521,7 +510,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             nid.uID = 1;
             nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
             nid.uCallbackMessage = WM_TRAYICON;
-            wcscpy_s(nid.szTip, L"Capture_Push");
+            
+            // Set tooltip with product name and version
+            wchar_t tooltip[128];
+            swprintf_s(tooltip, L"%s v%s", PRODUCT_NAME, TOSTRING(APP_VERSION));
+            wcscpy_s(nid.szTip, tooltip);
+            
             nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
             Shell_NotifyIconW(NIM_ADD, &nid);
             
@@ -652,6 +646,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     
     InitLogging();
     LogMessage("Application starting...");
+    LogMessage("Built with version: " + std::string(APP_VERSION)); // Log version
 
     // 双重检查：互斥锁 + 进程列表检查
     HANDLE hMutex = CreateMutexW(NULL, TRUE, L"Capture_PushTrayAppMutex");
