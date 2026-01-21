@@ -82,29 +82,50 @@ def get_config_path():
     return config_path
 
 
-def get_log_file_path(module_name):
+def cleanup_old_logs(log_dir, max_total_size_mb=50):
     """
-    获取日志文件路径（AppData 目录）
-    
-    Args:
-        module_name: 模块名称，用于生成日志文件名
+    清理旧日志文件，保持总大小在限制范围内。
+    """
+    try:
+        max_total_size = max_total_size_mb * 1024 * 1024
+        log_files = []
+        for f in log_dir.glob("*.log*"):
+            if f.is_file():
+                log_files.append((f, f.stat().st_mtime, f.stat().st_size))
         
-    Returns:
-        Path: 日志文件路径对象
+        # 按修改时间从旧到新排序
+        log_files.sort(key=lambda x: x[1])
         
-    Raises:
-        RuntimeError: 如果无法获取 AppData 目录
+        total_size = sum(f[2] for f in log_files)
+        
+        while total_size > max_total_size and log_files:
+            oldest_file, _, size = log_files.pop(0)
+            try:
+                oldest_file.unlink()
+                total_size -= size
+                print(f"[*] 已自动删除过旧日志: {oldest_file.name}")
+            except Exception as e:
+                print(f"[!] 无法删除日志文件 {oldest_file.name}: {e}")
+                
+    except Exception as e:
+        print(f"[!] 清理日志目录失败: {e}")
+
+
+def get_log_file_path(module_name=None):
+    """
+    获取日志文件路径（AppData 目录）。
+    现在统一使用当前日期作为文件名。
     """
     localappdata = os.environ.get('LOCALAPPDATA')
     if not localappdata:
         raise RuntimeError("无法获取 LOCALAPPDATA 环境变量")
     
     appdata_dir = Path(localappdata) / 'Capture_Push'
-    
-    # 确保目录存在
     appdata_dir.mkdir(parents=True, exist_ok=True)
     
-    return appdata_dir / f'{module_name}.log'
+    # 统一使用日期命名
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    return appdata_dir / f'{today}.log'
 
 
 def init_logger(module_name):
@@ -112,63 +133,66 @@ def init_logger(module_name):
     初始化日志系统（AppData 目录）
     
     Args:
-        module_name: 模块名称，用于生成日志文件名（如 'push', 'getCourseGrades'）
+        module_name: 模块名称，将显示在日志条目中
         
     Returns:
         logging.Logger: 配置好的日志记录器
-        
-    Raises:
-        FileNotFoundError: 配置文件不存在
-        RuntimeError: 无法获取环境变量或初始化失败
     """
     config_path = get_config_path()
-    log_file_path = get_log_file_path(module_name)
+    log_file_path = get_log_file_path()
+    appdata_dir = log_file_path.parent
     
-    # 读取配置文件获取日志级别
+    # 1. 自动清理旧日志
+    cleanup_old_logs(appdata_dir)
+    
+    # 2. 读取配置文件获取日志级别
     config = configparser.ConfigParser()
     config.read(str(config_path), encoding='utf-8')
     log_level_str = config.get('logging', 'level', fallback='DEBUG')
     log_level = getattr(logging, log_level_str.upper(), logging.DEBUG)
     
-    # 获取 root logger
+    # 3. 配置 Root Logger
     root_logger = logging.getLogger()
-    
-    # 移除所有现有的处理器
-    for handler in root_logger.handlers[:]:
-        if isinstance(handler, logging.FileHandler):
-            handler.close()
-        root_logger.removeHandler(handler)
-    
-    # 设置日志级别
     root_logger.setLevel(log_level)
     
-    # 创建控制台处理器
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
-    console_handler.setFormatter(console_formatter)
-    console_handler.setLevel(log_level)
-    root_logger.addHandler(console_handler)
+    # 避免重复添加处理器（针对同进程内多次调用）
+    has_console = any(isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler) for h in root_logger.handlers)
+    has_file = any(isinstance(h, logging.FileHandler) and h.baseFilename == str(log_file_path.absolute()) for h in root_logger.handlers)
     
-    # 添加新的文件处理器到 AppData 目录（强制 UTF-8 编码）
-    # 使用 RotatingFileHandler 限制单个日志文件大小为 1MB，最多保留 5 个备份文件
-    file_handler = logging.handlers.RotatingFileHandler(
-        str(log_file_path), 
-        maxBytes=1024*1024,  # 1MB
-        backupCount=5,      # 最多保留 5 个备份文件
-        encoding='utf-8'
-    )
-    file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
-    file_handler.setFormatter(file_formatter)
-    file_handler.setLevel(log_level)
-    root_logger.addHandler(file_handler)
+    # 统一的格式化器：包含模块名 (%(name)s)
+    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s'
+    formatter = logging.Formatter(log_format)
     
-    # 记录初始化信息
-    root_logger.info(f"✅ 日志系统初始化成功: {module_name}")
-    root_logger.info(f"📝 日志文件: {log_file_path}")
-    root_logger.info(f"⚙️ 配置文件: {config_path}")
-    root_logger.info(f"📋 日志级别: {log_level_str}")
+    if not has_console:
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(formatter)
+        console_handler.setLevel(log_level)
+        root_logger.addHandler(console_handler)
     
-    return root_logger
+    if not has_file:
+        # 清除所有旧的文件处理器（如果有的话）
+        for handler in root_logger.handlers[:]:
+            if isinstance(handler, logging.FileHandler):
+                handler.close()
+                root_logger.removeHandler(handler)
+        
+        # 添加新的统一文件处理器
+        # 单个文件上限 10MB，保留多个备份（总大小由 cleanup_old_logs 控制）
+        file_handler = logging.handlers.RotatingFileHandler(
+            str(log_file_path), 
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=20,         # 保留足够多的滚动文件，清理逻辑在 cleanup_old_logs 中
+            encoding='utf-8'
+        )
+        file_handler.setFormatter(formatter)
+        file_handler.setLevel(log_level)
+        root_logger.addHandler(file_handler)
+    
+    # 返回子 logger
+    logger = logging.getLogger(module_name)
+    logger.info(f"🚀 模块日志初始化: {module_name} -> {log_file_path.name}")
+    
+    return logger
 
 
 def get_logger(module_name=None):

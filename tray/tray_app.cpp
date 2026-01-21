@@ -16,6 +16,27 @@
 #include <Shlobj.h>   // for SHGetKnownFolderPath
 #include <tlhelp32.h> // for process enumeration
 
+#pragma comment(lib, "user32.lib")
+#pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "ole32.lib")  // for CoTaskMemFree
+#pragma comment(lib, "advapi32.lib")  // for registry functions
+
+#define WM_TRAYICON (WM_USER + 1)
+#define WM_LOOP_TIMER (WM_USER + 2)
+#define ID_MENU_GRADE_CHANGED 1001
+#define ID_MENU_GRADE_ALL 1002
+#define ID_MENU_REFRESH_GRADE 1003
+#define ID_MENU_SCHEDULE_TODAY 1004
+#define ID_MENU_SCHEDULE_TOMORROW 1005
+#define ID_MENU_SCHEDULE_FULL 1006
+#define ID_MENU_REFRESH_SCHEDULE 1007
+#define ID_MENU_SEND_CRASH_REPORT 1008
+#define ID_MENU_CHECK_UPDATE 1009
+#define ID_MENU_EXIT 1010
+#define ID_MENU_OPEN_CONFIG 1011
+#define ID_MENU_EDIT_CONFIG 1012
+#define TIMER_LOOP_CHECK 1001
+
 // Define version and product name macros (fallback if not defined by CMake)
 #ifndef APP_VERSION
 #define APP_VERSION "0.0.0"  // Default fallback version
@@ -132,43 +153,100 @@ std::string GetInstallPathFromRegistry() {
     return std::string(buffer.data());
 }
 
+// 获取当前日期字符串 (YYYY-MM-DD)
+std::string GetCurrentDateString() {
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+#ifdef _MSC_VER
+    localtime_s(&tm, &time_t);
+#else
+    tm = *std::localtime(&time_t);
+#endif
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%d");
+    return oss.str();
+}
+
+// 清理旧日志，限制总大小为 50MB
+void CleanupOldLogs(const std::string& logDir) {
+    const long long MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
+    std::string searchPath = logDir + "\\*.log*";
+    
+    struct LogFile {
+        std::string path;
+        unsigned long long size;
+        unsigned long long lastWriteTime;
+    };
+    std::vector<LogFile> files;
+    
+    WIN32_FIND_DATAA findData;
+    HANDLE hFind = FindFirstFileA(searchPath.c_str(), &findData);
+    if (hFind != INVALID_HANDLE_VALUE) {
+        do {
+            if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                ULARGE_INTEGER fileSize;
+                fileSize.LowPart = findData.nFileSizeLow;
+                fileSize.HighPart = findData.nFileSizeHigh;
+                
+                ULARGE_INTEGER writeTime;
+                writeTime.LowPart = findData.ftLastWriteTime.dwLowDateTime;
+                writeTime.HighPart = findData.ftLastWriteTime.dwHighDateTime;
+                
+                files.push_back({logDir + "\\" + findData.cFileName, fileSize.QuadPart, writeTime.QuadPart});
+            }
+        } while (FindNextFileA(hFind, &findData));
+        FindClose(hFind);
+    }
+    
+    // 按时间从旧到新排序
+    std::sort(files.begin(), files.end(), [](const LogFile& a, const LogFile& b) {
+        return a.lastWriteTime < b.lastWriteTime;
+    });
+    
+    long long totalSize = 0;
+    for (const auto& f : files) totalSize += f.size;
+    
+    size_t i = 0;
+    while (totalSize > MAX_TOTAL_SIZE && i < files.size()) {
+        if (DeleteFileA(files[i].path.c_str())) {
+            totalSize -= files[i].size;
+        }
+        i++;
+    }
+}
+
 // 初始化日志系统
 void InitLogging() {
     std::string logDir = GetLogDirectory();
     if (logDir.empty()) return;
-    std::string logPath = logDir + "\\tray_app.log";
     
-    // 启动时也检查一次大小
-    CheckAndRotateLog(logPath);
+    // 1. 清理旧日志
+    CleanupOldLogs(logDir);
+    
+    std::string dateStr = GetCurrentDateString();
+    std::string logPath = logDir + "\\" + dateStr + "_tray.log";
+    
+    // 2. 检查当前文件大小（用于滚动）
+    const long MAX_LOG_SIZE = 10 * 1024 * 1024; // 10MB
+    std::ifstream file(logPath, std::ios::binary | std::ios::ate);
+    if (file.is_open()) {
+        long size = (long)file.tellg();
+        file.close();
+        if (size > MAX_LOG_SIZE) {
+            // 简单滚动：直接重命名为 .old (或者可以实现更复杂的 .1, .2)
+            std::string oldLogPath = logPath + ".old";
+            DeleteFileA(oldLogPath.c_str());
+            MoveFileA(logPath.c_str(), oldLogPath.c_str());
+        }
+    }
     
     g_log_file.open(logPath, std::ios::out | std::ios::app);
     if (g_log_file.is_open()) {
         g_log_file << "\n--- Log session started at " 
                    << std::string(__DATE__) << " " << std::string(__TIME__);
-        g_log_file << " | Version: " << APP_VERSION << " ---\n"; // Log version at startup
+        g_log_file << " | Version: " << APP_VERSION << " ---\n";
         g_log_file.flush();
-    }
-}
-
-// 检查并滚动日志文件（限制大小）
-void CheckAndRotateLog(const std::string& logPath) {
-    const long MAX_LOG_SIZE = 2 * 1024 * 1024; // 2MB 上限
-    
-    std::ifstream file(logPath, std::ios::binary | std::ios::ate);
-    if (file.is_open()) {
-        long size = (long)file.tellg();
-        file.close();
-        
-        if (size > MAX_LOG_SIZE) {
-            if (g_log_file.is_open()) g_log_file.close();
-            
-            std::string oldLogPath = logPath + ".old";
-            DeleteFileA(oldLogPath.c_str());
-            MoveFileA(logPath.c_str(), oldLogPath.c_str());
-            
-            // 如果 g_log_file 之前是打开的，重新以追加模式打开（此时文件已是新的）
-            // 注意：InitLogging 之后调用时需要处理 reopen
-        }
     }
 }
 
@@ -197,11 +275,8 @@ void LogMessage(const std::string& message) {
     std::ostringstream log_stream;
     log_stream << std::put_time(&tm, "%Y-%m-%d %H:%M:%S")
                << '.' << std::setfill('0') << std::setw(3) << ms.count()
-               << " | " << message;
+               << " - [TRAY] - INFO - " << message; // 加入模块名标识
     std::string log_line = log_stream.str();
-
-    // 【调试选项】如需启用控制台输出，取消下面一行的注释
-    // std::cout << log_line << std::endl;
 
     // 写入日志文件
     if (g_log_file.is_open()) {
@@ -209,11 +284,11 @@ void LogMessage(const std::string& message) {
         
         // 检查文件大小并自动滚动
         std::string logDir = GetLogDirectory();
-        std::string logPath = logDir + "\\tray_app.log";
+        std::string dateStr = GetCurrentDateString();
+        std::string logPath = logDir + "\\" + dateStr + "_tray.log";
         
-        // 我们通过 tellp 获取当前流位置作为大小参考
         long current_pos = (long)g_log_file.tellp();
-        const long MAX_LOG_SIZE = 2 * 1024 * 1024; // 2MB
+        const long MAX_LOG_SIZE = 10 * 1024 * 1024; // 10MB
         
         if (current_pos > MAX_LOG_SIZE) {
             g_log_file.close();
