@@ -2,6 +2,10 @@
 import requests
 import json
 import configparser
+import hashlib
+import base64
+import hmac
+import time
 from pathlib import Path
 
 try:
@@ -12,6 +16,15 @@ except ImportError:
 # 延迟初始化
 _logger = None
 _config_path = None
+
+def gen_sign(timestamp, secret):
+    """生成飞书机器人签名校验所需的签名"""
+    # 拼接timestamp和secret
+    string_to_sign = '{}\n{}'.format(timestamp, secret)
+    hmac_code = hmac.new(string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
+    # 对结果进行base64处理
+    sign = base64.b64encode(hmac_code).decode('utf-8')
+    return sign
 
 def _get_logger():
     global _logger, _config_path
@@ -38,6 +51,7 @@ class FeishuSender:
         
         try:
             webhook_url = cfg.get("feishu", "webhook_url", fallback="").strip()
+            secret = cfg.get("feishu", "secret", fallback="").strip()
         except (configparser.NoSectionError, configparser.NoOptionError):
             logger.error("配置文件中缺少 [feishu] 配置节或 webhook_url")
             return False
@@ -60,11 +74,23 @@ class FeishuSender:
         headers = {
             "Content-Type": "application/json"
         }
+        
+        # 如果配置了密钥，则添加签名参数
+        if secret:
+            timestamp = str(int(time.time()))
+            sign = gen_sign(timestamp, secret)
+            # 将时间戳和签名作为查询参数添加到webhook URL
+            if '?' in webhook_url:
+                webhook_url_with_params = f"{webhook_url}&timestamp={timestamp}&sign={sign}"
+            else:
+                webhook_url_with_params = f"{webhook_url}?timestamp={timestamp}&sign={sign}"
+        else:
+            webhook_url_with_params = webhook_url
 
         try:
             logger.info(f"正在向飞书发送消息: {subject}")
             response = requests.post(
-                webhook_url, 
+                webhook_url_with_params, 
                 data=json.dumps(payload), 
                 headers=headers,
                 timeout=10

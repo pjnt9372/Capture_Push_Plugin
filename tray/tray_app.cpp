@@ -627,9 +627,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 AppendMenuW(hMenu, MF_STRING, ID_MENU_SCHEDULE_TOMORROW, L"推送明天课表");
                 AppendMenuW(hMenu, MF_STRING, ID_MENU_SCHEDULE_FULL, L"推送本学期全部课表");
                 AppendMenuW(hMenu, MF_STRING, ID_MENU_REFRESH_SCHEDULE, L"刷新课表");
-                AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
-                AppendMenuW(hMenu, MF_STRING, ID_MENU_SEND_CRASH_REPORT, L"发送崩溃报告");
-                AppendMenuW(hMenu, MF_STRING, ID_MENU_CHECK_UPDATE, L"检查更新");
+                //AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
+                //AppendMenuW(hMenu, MF_STRING, ID_MENU_SEND_CRASH_REPORT, L"发送崩溃报告");
+                //AppendMenuW(hMenu, MF_STRING, ID_MENU_CHECK_UPDATE, L"检查更新");
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
                 AppendMenuW(hMenu, MF_STRING, ID_MENU_OPEN_CONFIG, L"打开配置工具");
                 AppendMenuW(hMenu, MF_STRING, ID_MENU_EDIT_CONFIG, L"更改配置文件");

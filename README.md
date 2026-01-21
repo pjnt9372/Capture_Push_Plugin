@@ -37,7 +37,7 @@ Capture_Push 是一个课程成绩和课表自动追踪推送系统，能够自�
 ### 开发新院校,以及新的操作模块
 
 请参阅[开发指南](developer_tools/EXTENSION_GUIDE.md)
-
+请参阅[ui开发指南](developer_tools/GUI_MODULAR_DESIGN.md)
 
 ## 技术特性
 
