@@ -457,6 +457,121 @@ def fetch_and_push_next_week_schedule(force_update=False):
     except Exception as e:
         logger.error(f"fetch_and_push_next_week_schedule 异常: {e}", exc_info=True)
 
+
+def fetch_and_push_full_semester_schedule(force_update=False):
+    """获取并推送完整学期课表"""
+    logger.info(f"fetch_and_push_full_semester_schedule 被调用: force_update={force_update}")
+    try:
+        cfg = load_config()
+        username = cfg.get("account", "username")
+        password = cfg.get("account", "password")
+        first_monday_str = cfg.get("semester", "first_monday", fallback="").strip()
+        if not first_monday_str:
+            logger.warning("配置文件中未设置第一周周一 (first_monday)")
+            return
+            
+        first_monday = datetime.datetime.strptime(
+            first_monday_str, "%Y-%m-%d"
+        ).date()
+
+        # 计算当前学期的最大周数
+        today = datetime.date.today()
+        max_weeks = 25  # 假设最多25周
+        
+        logger.info(f"推送完整学期课表")
+        
+        school_mod = get_current_school_module()
+        schedule = school_mod.fetch_course_schedule(username, password, force_update)
+        if not schedule:
+            logger.error("课表获取失败")
+            return
+
+        # 加载手动修改
+        manual_data = load_manual_schedule()
+        manual_courses = []
+        manual_occupied = set() # (weekday, period)
+        
+        for key, data in manual_data.items():
+            col, start = map(int, key.split("-"))
+            name = data.get("课程名称", "")
+            if not name: continue
+            row_span = data.get("row_span", 1)
+            mc = {
+                "星期": col,
+                "开始小节": start,
+                "结束小节": start + row_span - 1,
+                "课程名称": name,
+                "教师": data.get("教师", ""),
+                "教室": data.get("教室", ""),
+                "周次列表": ["全学期"]
+            }
+            manual_courses.append(mc)
+            for p in range(start, start + row_span):
+                manual_occupied.add((col, p))
+
+        # 按周和天分组
+        semester_schedule = {}
+        for week in range(1, max_weeks + 1):
+            # 检查这一周是否在学期范围内
+            week_start = first_monday + datetime.timedelta(weeks=week-1)
+            if week_start < first_monday:
+                continue
+            
+            # 检查这一周是否在学期范围内（不超过当前日期之后很远）
+            week_end = week_start + datetime.timedelta(days=6)
+            if today.year == week_start.year and today.month == 12 and week_start.month == 1:
+                # 跨年处理，如果是12月但周开始是1月，说明跨年了
+                pass
+            elif week_start > today + datetime.timedelta(weeks=4):  # 超出未来4周则跳过
+                continue
+
+            semester_schedule[week] = []
+            for d in range(1, 8):
+                day_list = []
+                # 手动课程
+                for mc in manual_courses:
+                    if mc["星期"] == d:
+                        day_list.append(mc)
+                
+                # 解析课程
+                for c in schedule:
+                    if c["星期"] == d and (str(week) in [str(w) for w in c["周次列表"]] or "全学期" in c["周次列表"]):
+                        is_covered = False
+                        for p in range(c["开始小节"], c["结束小节"] + 1):
+                            if (d, p) in manual_occupied:
+                                is_covered = True
+                                break
+                        if not is_covered:
+                            day_list.append(c)
+                
+                if day_list:
+                    # 排序
+                    day_list.sort(key=lambda x: x["开始小节"])
+                    semester_schedule[week].append(day_list)
+
+        # 过滤掉空周
+        semester_schedule = {week: days for week, days in semester_schedule.items() if days}
+
+        if semester_schedule:
+            # 将学期课表转换为适合推送的格式
+            formatted_schedule = []
+            week_counts = []
+            for week_num in sorted(semester_schedule.keys()):
+                week_days = semester_schedule[week_num]
+                formatted_schedule.append(week_days)
+                week_counts.append(week_num)
+            
+            if formatted_schedule:
+                send_full_schedule_mail(formatted_schedule, len(week_counts))
+                logger.info(f"完整学期课表推送完成，共{len(week_counts)}周")
+            else:
+                logger.info("完整学期无课，不推送")
+        else:
+            logger.info("完整学期无课，不推送")
+
+    except Exception as e:
+        logger.error(f"fetch_and_push_full_semester_schedule 异常: {e}", exc_info=True)
+
 # ---------- CLI ----------
 def main():
     logger.info(f"main() 被调用，参数: {sys.argv}")
@@ -469,6 +584,7 @@ def main():
     parser.add_argument("--push-today", action="store_true", help="推送今日课表")
     parser.add_argument("--push-tomorrow", action="store_true", help="推送明日课表")
     parser.add_argument("--push-next-week", action="store_true", help="推送下周全周课表")
+    parser.add_argument("--push-full-schedule", action="store_true", help="推送完整学期课表")
     parser.add_argument("--pack-logs", action="store_true", help="打包日志文件用于崩溃上报")
     parser.add_argument("--check-update", action="store_true", help="检查软件更新")
     parser.add_argument("--force", action="store_true", help="强制从网络更新,忽略循环检测")
@@ -504,6 +620,9 @@ def main():
     if args.push_next_week:
         logger.info("执行: fetch_and_push_next_week_schedule")
         fetch_and_push_next_week_schedule(force_update=args.force)
+    if args.push_full_schedule:
+        logger.info("执行: fetch_and_push_full_semester_schedule")
+        fetch_and_push_full_semester_schedule(force_update=args.force)
     if args.pack_logs:
         logger.info("执行: pack_logs")
         report_path = pack_logs()

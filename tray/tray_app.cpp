@@ -641,16 +641,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     ExecutePythonCommand("--fetch-grade --force");
                     break;
                 case ID_MENU_SCHEDULE_TODAY:
-                    LogMessage("User selected: Fetch today's schedule");
-                    ExecutePythonCommand("--fetch-schedule --force");
+                    LogMessage("User selected: Push today's schedule");
+                    ExecutePythonCommand("--push-today --force");
                     break;
                 case ID_MENU_SCHEDULE_TOMORROW:
                     LogMessage("User selected: Push tomorrow's schedule");
-                    ExecutePythonCommand("--push-schedule --force");
+                    ExecutePythonCommand("--push-tomorrow --force");
                     break;
                 case ID_MENU_SCHEDULE_FULL:
-                    LogMessage("User selected: Fetch full schedule");
-                    ExecutePythonCommand("--fetch-schedule --force");
+                    LogMessage("User selected: Push full semester schedule");
+                    ExecutePythonCommand("--push-full-schedule --force");
                     break;
                 /*case ID_MENU_SEND_CRASH_REPORT:
                     LogMessage("User selected: Send crash report");

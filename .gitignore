@@ -13,6 +13,7 @@ __pycache__/
 .vscode/
 build/
 developer_tools/build_cache
+.qoder/
 
 # Logs
 app.log

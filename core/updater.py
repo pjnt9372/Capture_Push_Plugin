@@ -233,6 +233,40 @@ class Updater:
             subprocess.Popen(cmd, shell=True)
             
             logger.info("安装程序已启动，即将退出当前程序")
+            
+            # 静默安装时，需要在安装完成后自启动托盘程序
+            if silent or 'Lite_Setup' in os.path.basename(installer_path):
+                import threading
+                import time
+                import winreg
+                
+                def delayed_start_tray():
+                    # 等待安装完成
+                    time.sleep(5)
+                    
+                    # 尝试从注册表获取安装路径
+                    try:
+                        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 
+                                            r"SOFTWARE\\Capture_Push", 
+                                            0, 
+                                            winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+                        install_path, _ = winreg.QueryValueEx(key, "InstallPath")
+                        winreg.CloseKey(key)
+                        
+                        tray_exe = Path(install_path) / "Capture_Push_tray.exe"
+                        if tray_exe.exists():
+                            # 启动托盘程序
+                            subprocess.Popen([str(tray_exe)], shell=True)
+                            logger.info("托盘程序已启动")
+                        else:
+                            logger.warning(f"托盘程序不存在: {tray_exe}")
+                    except Exception as e:
+                        logger.error(f"启动托盘程序失败: {e}")
+                
+                # 在后台线程中启动托盘程序
+                thread = threading.Thread(target=delayed_start_tray, daemon=True)
+                thread.start()
+            
             return True
             
         except Exception as e:
