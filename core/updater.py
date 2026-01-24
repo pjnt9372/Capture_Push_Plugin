@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Optional, Tuple
 from core.log import get_logger
 
+PROXY_URL_PREFIX = "https://ghfast.top/"
+
 logger = get_logger()
 
 
@@ -69,8 +71,37 @@ class Updater:
                 return None
                 
         except urllib.error.URLError as e:
-            logger.error(f"网络请求失败: {e}")
-            return None
+            logger.warning(f"直接访问GitHub API失败: {e}")
+            
+            # 尝试使用代理访问API
+            try:
+                logger.info(f"尝试使用代理访问API: {PROXY_URL_PREFIX}{self.API_URL}")
+                proxy_api_url = PROXY_URL_PREFIX + self.API_URL
+                req_proxy = urllib.request.Request(
+                    proxy_api_url,
+                    headers={'User-Agent': 'Capture_Push-Updater'}
+                )
+                
+                with urllib.request.urlopen(req_proxy, timeout=20) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                
+                latest_version = data['tag_name'].lstrip('v').replace('-', '.').replace('_', '.')
+                
+                logger.info(f"通过代理获取到版本: {self.current_version}, 最新版本: {latest_version}")
+                
+                if self._compare_version(latest_version, self.current_version) > 0:
+                    logger.info(f"发现新版本: {latest_version}")
+                    return latest_version, data
+                else:
+                    logger.info("当前已是最新版本")
+                    return None
+                    
+            except urllib.error.URLError as proxy_error:
+                logger.error(f"通过代理访问GitHub API也失败: {proxy_error}")
+                return None
+            except Exception as proxy_error:
+                logger.error(f"通过代理检查更新失败: {proxy_error}")
+                return None
         except Exception as e:
             logger.error(f"检查更新失败: {e}")
             return None
@@ -189,12 +220,31 @@ class Updater:
                     progress = min(100, (block_num * block_size / total_size) * 100)
                     progress_callback(progress)
             
+            # 尝试直接下载
             req = urllib.request.Request(
                 download_url,
                 headers={'User-Agent': 'Capture_Push-Updater'}
             )
             
-            urllib.request.urlretrieve(download_url, download_path, _progress_hook)
+            try:
+                urllib.request.urlretrieve(download_url, download_path, _progress_hook)
+            except Exception as direct_error:
+                logger.warning(f"直接下载失败: {direct_error}")
+                
+                # 使用代理地址尝试下载
+                proxy_url = PROXY_URL_PREFIX + download_url
+                logger.info(f"尝试使用代理下载: {proxy_url}")
+                
+                try:
+                    req_proxy = urllib.request.Request(
+                        proxy_url,
+                        headers={'User-Agent': 'Capture_Push-Updater'}
+                    )
+                    urllib.request.urlretrieve(proxy_url, download_path, _progress_hook)
+                    logger.info("代理下载成功")
+                except Exception as proxy_error:
+                    logger.error(f"代理下载也失败: {proxy_error}")
+                    raise proxy_error  # 抛出异常以便外层捕获
             
             logger.info(f"下载完成: {download_path}")
             return str(download_path)

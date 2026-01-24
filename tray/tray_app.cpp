@@ -63,6 +63,14 @@ LoopConfig g_loop_config;
 std::ofstream g_log_file;
 std::mutex g_log_mutex;
 
+// 日志级别枚举
+enum LogLevel {
+    LOG_DEBUG,
+    LOG_INFO,
+    LOG_WARN,
+    LOG_ERROR
+};
+
 // 函数前向声明
 std::string GetInstallPathFromRegistry();
 std::string GetExecutableDirectory();
@@ -72,7 +80,7 @@ void ExecuteConfigGui();
 void EditConfigFile();
 void InitLogging();
 void CloseLogging();
-void LogMessage(const std::string& message);
+void LogMessage(const std::string& message, LogLevel level = LOG_INFO);
 void CheckAndRotateLog(const std::string& logPath);
 
 // 检查是否已有同名进程在运行
@@ -165,15 +173,17 @@ std::string GetCurrentDateString() {
     return oss.str();
 }
 
-// 清理旧日志，限制总大小为 50MB
+// 清理旧日志，限制总大小为 50MB，并删除超过7天的日志
 void CleanupOldLogs(const std::string& logDir) {
     const long long MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
+    const int MAX_DAYS = 7; // 最大保留天数
     std::string searchPath = logDir + "\\*.log*";
     
     struct LogFile {
         std::string path;
         unsigned long long size;
         unsigned long long lastWriteTime;
+        SYSTEMTIME writeSysTime;
     };
     std::vector<LogFile> files;
     
@@ -190,17 +200,55 @@ void CleanupOldLogs(const std::string& logDir) {
                 writeTime.LowPart = findData.ftLastWriteTime.dwLowDateTime;
                 writeTime.HighPart = findData.ftLastWriteTime.dwHighDateTime;
                 
-                files.push_back({logDir + "\\" + findData.cFileName, fileSize.QuadPart, writeTime.QuadPart});
+                // 将文件时间转换为系统时间
+                FILETIME ft = {findData.ftLastWriteTime.dwLowDateTime, findData.ftLastWriteTime.dwHighDateTime};
+                SYSTEMTIME st;
+                FileTimeToSystemTime(&ft, &st);
+                
+                files.push_back({logDir + "\\" + findData.cFileName, fileSize.QuadPart, writeTime.QuadPart, st});
             }
         } while (FindNextFileA(hFind, &findData));
         FindClose(hFind);
     }
+    
+    // 获取当前时间
+    SYSTEMTIME currentTime;
+    GetLocalTime(&currentTime);
+    
+    // 计算7天前的日期
+    SYSTEMTIME sevenDaysAgo = currentTime;
+    // 先转换为 FILETIME，然后减去相应的时间量
+    FILETIME ftCurrent, ftSevenDaysAgo;
+    SystemTimeToFileTime(&currentTime, &ftCurrent);
+    ULARGE_INTEGER uiCurrent, uiSevenDays;
+    uiCurrent.LowPart = ftCurrent.dwLowDateTime;
+    uiCurrent.HighPart = ftCurrent.dwHighDateTime;
+    uiSevenDays.QuadPart = uiCurrent.QuadPart - (MAX_DAYS * 24 * 60 * 60 * 10000000ULL); // 7天的100纳秒间隔数
+    ftSevenDaysAgo.dwLowDateTime = uiSevenDays.LowPart;
+    ftSevenDaysAgo.dwHighDateTime = uiSevenDays.HighPart;
     
     // 按时间从旧到新排序
     std::sort(files.begin(), files.end(), [](const LogFile& a, const LogFile& b) {
         return a.lastWriteTime < b.lastWriteTime;
     });
     
+    // 首先删除超过7天的日志文件
+    for (auto it = files.begin(); it != files.end();) {
+        FILETIME ftFile;
+        SystemTimeToFileTime(&(it->writeSysTime), &ftFile);
+        if (CompareFileTime(&ftFile, &ftSevenDaysAgo) < 0) { // 文件时间早于7天前
+            if (DeleteFileA(it->path.c_str())) {
+                LogMessage("已自动删除超过" + std::to_string(MAX_DAYS) + "天的日志: " + it->path, LOG_INFO);
+                it = files.erase(it); // 从列表中移除已删除的文件
+            } else {
+                ++it; // 如果删除失败，移动到下一个
+            }
+        } else {
+            ++it;
+        }
+    }
+    
+    // 对剩余文件按大小进行清理
     long long totalSize = 0;
     for (const auto& f : files) totalSize += f.size;
     
@@ -256,7 +304,17 @@ void CloseLogging() {
 }
 
 // 安全日志写入（带时间戳，仅写入文件）
-void LogMessage(const std::string& message) {
+void LogMessage(const std::string& message, LogLevel level) {
+    // 获取日志级别字符串
+    std::string levelStr;
+    switch(level) {
+        case LOG_DEBUG: levelStr = "DEBUG"; break;
+        case LOG_WARN: levelStr = "WARN"; break;
+        case LOG_ERROR: levelStr = "ERROR"; break;
+        case LOG_INFO:
+        default: levelStr = "INFO"; break;
+    }
+
     auto now = std::chrono::system_clock::now();
     auto time_t = std::chrono::system_clock::to_time_t(now);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
@@ -272,7 +330,7 @@ void LogMessage(const std::string& message) {
     std::ostringstream log_stream;
     log_stream << std::put_time(&tm, "%Y-%m-%d %H:%M:%S")
                << '.' << std::setfill('0') << std::setw(3) << ms.count()
-               << " - [TRAY] - INFO - " << message; // 加入模块名标识
+               << " - [TRAY] - " << levelStr << " - " << message; // 加入模块名标识
     std::string log_line = log_stream.str();
 
     // 写入日志文件
@@ -302,19 +360,19 @@ void LogMessage(const std::string& message) {
 
 // 读取配置文件（从 AppData 目录）
 void ReadLoopConfig() {
-    LogMessage("Reading config.ini from AppData...");
+    LogMessage("Reading config.ini from AppData...", LOG_DEBUG);
     
     // 修复：从 AppData 目录读取配置文件
     std::string logDir = GetLogDirectory();
     if (logDir.empty()) {
-        LogMessage("Failed to get AppData directory.");
+        LogMessage("Failed to get AppData directory.", LOG_INFO);
         return;
     }
     std::string config_path = logDir + "\\config.ini";
     
     std::ifstream config_file(config_path);
     if (!config_file.is_open()) {
-        LogMessage("config.ini not found in AppData: " + config_path);
+        LogMessage("config.ini not found in AppData: " + config_path, LOG_INFO);
         return;
     }
     
@@ -366,7 +424,7 @@ void ReadLoopConfig() {
     }
     config_file.close();
     LogMessage("Config loaded from AppData: grade_enabled=" + std::to_string(g_loop_config.grade_enabled) +
-               ", schedule_enabled=" + std::to_string(g_loop_config.schedule_enabled));
+               ", schedule_enabled=" + std::to_string(g_loop_config.schedule_enabled), LOG_DEBUG);
 }
 
 // 计算最小循环间隔（毫秒）
@@ -394,21 +452,21 @@ void ExecuteScheduledPushCheck() {
 
     // 当天 8 点推送 (如果错过时间，只要在当天 8 点后且未推送过，就补发)
     if (g_loop_config.push_today_8am && now_tm.tm_hour >= 8 && last_push_today_date != current_date) {
-        LogMessage("Scheduled task: Today's schedule push (Triggered/Catch-up)");
+        LogMessage("Scheduled task: Today's schedule push (Triggered/Catch-up)", LOG_INFO);
         ExecutePythonCommand("--push-today");
         last_push_today_date = current_date;
     }
 
     // 前一天 21 点推送明天课表 (如果错过时间，在 21 点后至午夜前补发)
     if (g_loop_config.push_tomorrow_9pm && now_tm.tm_hour >= 21 && last_push_tomorrow_date != current_date) {
-        LogMessage("Scheduled task: Tomorrow's schedule push (Triggered/Catch-up)");
+        LogMessage("Scheduled task: Tomorrow's schedule push (Triggered/Catch-up)", LOG_INFO);
         ExecutePythonCommand("--push-tomorrow");
         last_push_tomorrow_date = current_date;
     }
 
     // 周日 20 点推送下周全部课表 (如果周日 20 点后错过，则在周日内补发)
     if (g_loop_config.push_next_week_sunday && now_tm.tm_wday == 0 && now_tm.tm_hour >= 20 && last_push_next_week_date != current_date) {
-        LogMessage("Scheduled task: Next week schedule push (Triggered/Catch-up)");
+        LogMessage("Scheduled task: Next week schedule push (Triggered/Catch-up)", LOG_INFO);
         ExecutePythonCommand("--push-next-week");
         last_push_next_week_date = current_date;
     }
@@ -416,7 +474,7 @@ void ExecuteScheduledPushCheck() {
 
 // 执行循环检测
 void ExecuteLoopCheck() {
-    LogMessage("Timer triggered: performing checks.");
+    LogMessage("Timer triggered: performing checks.", LOG_INFO);
     
     // 每次触发都重新读取配置，确保能及时响应 GUI 的修改
     ReadLoopConfig();
@@ -430,13 +488,13 @@ void ExecuteLoopCheck() {
     time_t now = time(NULL);
 
     if (g_loop_config.grade_enabled && (now - last_grade_check >= g_loop_config.grade_interval)) {
-        LogMessage("Grade loop: fetching grades.");
+        LogMessage("Grade loop: fetching grades.", LOG_INFO);
         ExecutePythonCommand("--fetch-grade");
         last_grade_check = now;
     }
     
     if (g_loop_config.schedule_enabled && (now - last_schedule_check >= g_loop_config.schedule_interval)) {
-        LogMessage("Schedule loop: fetching schedule.");
+        LogMessage("Schedule loop: fetching schedule.", LOG_INFO);
         ExecutePythonCommand("--fetch-schedule");
         last_schedule_check = now;
     }
@@ -447,12 +505,12 @@ std::string GetExecutableDirectory() {
     // 优先尝试从注册表读取安装路径
     std::string registry_path = GetInstallPathFromRegistry();
     if (!registry_path.empty()) {
-        LogMessage("从注册表获取到安装路径: " + registry_path);
+        LogMessage("从注册表获取到安装路径: " + registry_path, LOG_INFO);
         return registry_path;
     }
     
     // 如果注册表读取失败，回退到原来的方法
-    LogMessage("注册表读取失败，使用可执行文件目录");
+    LogMessage("注册表读取失败，使用可执行文件目录", LOG_INFO);
     wchar_t exe_path[MAX_PATH];
     GetModuleFileNameW(NULL, exe_path, MAX_PATH);
     std::wstring wstr_exe_path(exe_path);
@@ -478,9 +536,9 @@ bool CheckPythonEnvironment() {
 
 // 执行Python脚本（无窗口模式）
 void ExecutePythonCommand(const std::string& command_suffix) {
-    LogMessage("Executing Python command: " + command_suffix);
+    LogMessage("Executing Python command: " + command_suffix, LOG_INFO);
     if (!CheckPythonEnvironment()) {
-        LogMessage("Python environment check failed!");
+        LogMessage("Python environment check failed!", LOG_INFO);
         MessageBoxA(NULL, "Python环境未正确安装！\n请重新运行安装程序。", "错误", MB_OK | MB_ICONERROR);
         return;
     }
@@ -500,25 +558,25 @@ void ExecutePythonCommand(const std::string& command_suffix) {
     
     if (CreateProcessA(NULL, (LPSTR)full_command.c_str(), NULL, NULL, FALSE, 
                        CREATE_NO_WINDOW, NULL, exe_dir.c_str(), &si, &pi)) {
-        LogMessage("Python process started successfully.");
+        LogMessage("Python process started successfully.", LOG_INFO);
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
     } else {
         DWORD err = GetLastError();
-        LogMessage("Failed to start Python process. Error: " + std::to_string(err));
+        LogMessage("Failed to start Python process. Error: " + std::to_string(err), LOG_INFO);
     }
 }
 
 // 打开配置界面
 void ExecuteConfigGui() {
-    LogMessage("Launching config GUI...");
+    LogMessage("Launching config GUI...", LOG_INFO);
     std::string exe_dir = GetExecutableDirectory();
     std::string pythonw_path = exe_dir + "\\.venv\\pythonw.exe";
     std::string gui_script_path = exe_dir + "\\gui\\gui.py";
 
     if (GetFileAttributesA(pythonw_path.c_str()) == INVALID_FILE_ATTRIBUTES || 
         GetFileAttributesA(gui_script_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
-        LogMessage("Python environment or GUI script missing.");
+        LogMessage("Python environment or GUI script missing.", LOG_INFO);
         MessageBoxA(NULL, "配置界面所需环境未找到！\n请重新运行安装程序。", "错误", MB_OK | MB_ICONERROR);
         return;
     }
@@ -529,35 +587,35 @@ void ExecuteConfigGui() {
 
     if ((intptr_t)result <= 32) {
         DWORD error = GetLastError();
-        LogMessage("Failed to launch config GUI. Error: " + std::to_string(error));
+        LogMessage("Failed to launch config GUI. Error: " + std::to_string(error), LOG_INFO);
         char error_msg[256];
         sprintf_s(error_msg, "无法启动配置工具！\n错误代码：%lu\n请检查程序文件是否完整。", error);
         MessageBoxA(NULL, error_msg, "错误", MB_OK | MB_ICONERROR);
     } else {
-        LogMessage("Config GUI launched.");
+        LogMessage("Config GUI launched.", LOG_INFO);
     }
 }
 
 // 用记事本打开配置文件（从 AppData 目录）
 void EditConfigFile() {
-    LogMessage("Opening config.ini in Notepad from AppData...");
+    LogMessage("Opening config.ini in Notepad from AppData...", LOG_INFO);
     
     // 修复：从 AppData 目录读取配置文件
     std::string logDir = GetLogDirectory();
     if (logDir.empty()) {
-        LogMessage("Failed to get AppData directory.");
+        LogMessage("Failed to get AppData directory.", LOG_INFO);
         MessageBoxA(NULL, "无法获取 AppData 目录！", "错误", MB_OK | MB_ICONERROR);
         return;
     }
     std::string config_path = logDir + "\\config.ini";
 
     if (GetFileAttributesA(config_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
-        LogMessage("config.ini not found in AppData when trying to edit: " + config_path);
+        LogMessage("config.ini not found in AppData when trying to edit: " + config_path, LOG_INFO);
         MessageBoxA(NULL, "配置文件不存在！\n请先使用配置工具创建配置。", "错误", MB_OK | MB_ICONERROR);
         return;
     }
 
-    LogMessage("Opening config file: " + config_path);
+    LogMessage("Opening config file: " + config_path, LOG_INFO);
     ShellExecuteA(NULL, "open", "notepad.exe", config_path.c_str(), NULL, SW_SHOW);
 }
 
@@ -581,7 +639,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             int interval = GetMinLoopInterval();
             if (interval > 0) {
                 SetTimer(hwnd, TIMER_LOOP_CHECK, interval, NULL);
-                LogMessage("Loop timer set to " + std::to_string(interval / 1000) + " seconds.");
+                LogMessage("Loop timer set to " + std::to_string(interval / 1000) + " seconds.", LOG_INFO);
             }
             break;
         }
@@ -629,39 +687,39 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         {
             switch (LOWORD(wParam)) {
                 case ID_MENU_GRADE_CHANGED:
-                    LogMessage("User selected: Push changed grades");
+                    LogMessage("User selected: Push changed grades", LOG_INFO);
                     ExecutePythonCommand("--push-grade --force");
                     break;
                 case ID_MENU_GRADE_ALL:
-                    LogMessage("User selected: Push all grades");
+                    LogMessage("User selected: Push all grades", LOG_INFO);
                     ExecutePythonCommand("--push-all-grades --force");
                     break;
                 case ID_MENU_REFRESH_GRADE:
-                    LogMessage("User selected: Refresh grades");
+                    LogMessage("User selected: Refresh grades", LOG_INFO);
                     ExecutePythonCommand("--fetch-grade --force");
                     break;
                 case ID_MENU_SCHEDULE_TODAY:
-                    LogMessage("User selected: Push today's schedule");
+                    LogMessage("User selected: Push today's schedule", LOG_INFO);
                     ExecutePythonCommand("--push-today --force");
                     break;
                 case ID_MENU_SCHEDULE_TOMORROW:
-                    LogMessage("User selected: Push tomorrow's schedule");
+                    LogMessage("User selected: Push tomorrow's schedule", LOG_INFO);
                     ExecutePythonCommand("--push-tomorrow --force");
                     break;
                 case ID_MENU_SCHEDULE_FULL:
-                    LogMessage("User selected: Push full semester schedule");
+                    LogMessage("User selected: Push full semester schedule", LOG_INFO);
                     ExecutePythonCommand("--push-full-schedule --force");
                     break;
                 /*case ID_MENU_SEND_CRASH_REPORT:
-                    LogMessage("User selected: Send crash report");
+                    LogMessage("User selected: Send crash report", LOG_INFO);
                     ExecutePythonCommand("--pack-logs");
                     break;
                 case ID_MENU_CHECK_UPDATE:
-                    LogMessage("User selected: Check for updates");
+                    LogMessage("User selected: Check for updates", LOG_INFO);
                     ExecutePythonCommand("--check-update");
                     break;*/
                 case ID_MENU_REFRESH_SCHEDULE:
-                    LogMessage("User selected: Refresh schedule");
+                    LogMessage("User selected: Refresh schedule", LOG_INFO);
                     ExecutePythonCommand("--fetch-schedule --force");
                     break;
                 case ID_MENU_OPEN_CONFIG:
@@ -671,7 +729,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     EditConfigFile();
                     break;
                 case ID_MENU_EXIT:
-                    LogMessage("User selected 'Exit'. Shutting down.");
+                    LogMessage("User selected 'Exit'. Shutting down.", LOG_INFO);
                     KillTimer(hwnd, TIMER_LOOP_CHECK);
                     Shell_NotifyIconW(NIM_DELETE, &nid);
                     PostQuitMessage(0);
@@ -703,15 +761,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     */
     
     InitLogging();
-    LogMessage("Application starting...");
-    LogMessage("Built with version: " + std::string(APP_VERSION));
+    LogMessage("Application starting...", LOG_INFO);
+    LogMessage("Built with version: " + std::string(APP_VERSION), LOG_INFO);
 
     // 双重检查：互斥锁 + 进程列表检查
     HANDLE hMutex = CreateMutexW(NULL, TRUE, L"Capture_PushTrayAppMutex");
     bool alreadyRunning = (GetLastError() == ERROR_ALREADY_EXISTS);
     
     if (alreadyRunning || IsProcessRunning(L"Capture_Push_tray.exe")) {
-        LogMessage("Another instance is already running. Exiting.");
+        LogMessage("Another instance is already running. Exiting.", LOG_INFO);
         MessageBoxW(NULL, 
                     L"Capture_Push Tray Program is already running!\nIf you can't see the tray icon, please check Task Manager.",
                     L"Info",

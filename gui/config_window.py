@@ -5,10 +5,10 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, 
     QFormLayout, QMessageBox, QCheckBox, QSpinBox, QHBoxLayout, 
     QGroupBox, QRadioButton, QButtonGroup, QTabWidget, QComboBox, 
-    QDateEdit, QApplication
+    QDateEdit, QApplication, QToolButton
 )
-from PySide6.QtGui import QDesktopServices
-from PySide6.QtCore import Qt, QDate, QUrl
+from PySide6.QtGui import QDesktopServices, QIcon
+from PySide6.QtCore import Qt, QDate, QUrl, QSize
 
 # 动态获取基础目录和配置路径
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -32,6 +32,60 @@ except ImportError:
 
 CONFIG_FILE = str(get_config_path())
 GITHUB_URL = "https://github.com/pjnt9372/Capture_Push"
+
+
+class CollapsibleBox(QWidget):
+    def __init__(self, title, parent=None):
+        super().__init__(parent)
+
+        self.title = title
+        
+        # 创建主布局
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 创建标题栏
+        self.toggle_button = QToolButton()
+        self.toggle_button.setStyleSheet(
+            "QToolButton {\n"
+            "    border: none;\n"
+            "    background: #f0f0f0;\n"
+            "    border-radius: 4px;\n"
+            "    padding: 6px;\n"
+            "    font-weight: bold;\n"
+            "    text-align: left;\n"
+            "}\n" 
+            "QToolButton::pressed {\n"
+            "    background: #e0e0e0;\n"
+            "}"
+        )
+        self.toggle_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.toggle_button.setArrowType(Qt.DownArrow)
+        self.toggle_button.setText(title)
+        self.toggle_button.setCheckable(True)
+        self.toggle_button.setChecked(False)
+        
+        # 内容区域
+        self.content_area = QWidget()
+        self.content_area.setMaximumHeight(0)
+        self.content_area.setMinimumHeight(0)
+        
+        # 布局
+        main_layout.addWidget(self.toggle_button)
+        main_layout.addWidget(self.content_area)
+        
+        # 信号连接
+        self.toggle_button.clicked.connect(self.on_pressed)
+    
+    def on_pressed(self):
+        checked = self.toggle_button.isChecked()
+        self.toggle_button.setArrowType(Qt.DownArrow if not checked else Qt.RightArrow)
+        
+        if checked:
+            self.content_area.setMaximumHeight(16777215)  # 设置为最大高度以展开
+        else:
+            self.content_area.setMaximumHeight(0)  # 设置为0以折叠
+
 
 def get_app_version():
     version_file = BASE_DIR / "VERSION"
@@ -58,6 +112,11 @@ class ConfigWindow(QWidget):
 
         self.init_ui()
         self.load_config()
+
+    def create_collapsible_group(self, title, group_name):
+        """创建可折叠的配置组"""
+        collapsible = CollapsibleBox(title)
+        return collapsible
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -165,19 +224,22 @@ class ConfigWindow(QWidget):
         self.push_none_radio = QRadioButton("不启用推送")
         self.push_email_radio = QRadioButton("邮件推送")
         self.push_feishu_radio = QRadioButton("飞书机器人推送")
+        self.push_serverchan_radio = QRadioButton("Server酱推送")
         
         self.push_button_group.addButton(self.push_none_radio, 0)
         self.push_button_group.addButton(self.push_email_radio, 1)
         self.push_button_group.addButton(self.push_feishu_radio, 2)
+        self.push_button_group.addButton(self.push_serverchan_radio, 3)
         
         method_layout.addWidget(self.push_none_radio)
         method_layout.addWidget(self.push_email_radio)
         method_layout.addWidget(self.push_feishu_radio)
+        method_layout.addWidget(self.push_serverchan_radio)
         layout.addWidget(method_group)
 
-        # 邮件配置
-        email_group = QGroupBox("邮件配置")
-        email_form = QFormLayout(email_group)
+        # 邮件配置（可折叠）
+        self.email_collapsible = self.create_collapsible_group("邮件配置", "email_group")
+        email_form = QFormLayout(self.email_collapsible.content_area)
         self.smtp = QLineEdit()
         self.port = QLineEdit()
         self.sender = QLineEdit()
@@ -189,17 +251,28 @@ class ConfigWindow(QWidget):
         email_form.addRow("发件邮箱", self.sender)
         email_form.addRow("收件邮箱", self.receiver)
         email_form.addRow("授权码", self.auth)
-        layout.addWidget(email_group)
+        layout.addWidget(self.email_collapsible)
 
-        # 飞书配置
-        feishu_group = QGroupBox("飞书机器人配置")
-        feishu_form = QFormLayout(feishu_group)
+        # 飞书配置（可折叠）
+        self.feishu_collapsible = self.create_collapsible_group("飞书机器人配置", "feishu_group")
+        feishu_form = QFormLayout(self.feishu_collapsible.content_area)
         self.feishu_webhook = QLineEdit()
         self.feishu_secret = QLineEdit()
         self.feishu_secret.setEchoMode(QLineEdit.Password)  # 密钥字段设为密码模式
         feishu_form.addRow("Webhook URL", self.feishu_webhook)
         feishu_form.addRow("密钥 (启用签名校验)", self.feishu_secret)
-        layout.addWidget(feishu_group)
+        layout.addWidget(self.feishu_collapsible)
+
+        # Server酱配置（可折叠）
+        self.serverchan_collapsible = self.create_collapsible_group("Server酱配置", "serverchan_group")
+        serverchan_form = QFormLayout(self.serverchan_collapsible.content_area)
+        self.serverchan_sendkey = QLineEdit()
+        self.serverchan_sendkey.setEchoMode(QLineEdit.Normal)  # SendKey不需要隐藏
+        serverchan_form.addRow("SendKey", self.serverchan_sendkey)
+        layout.addWidget(self.serverchan_collapsible)
+
+        # 连接推送方式选择的信号，以便自动展开对应的配置组并保存
+        self.push_button_group.buttonClicked.connect(lambda: self.on_push_method_changed(auto_save=True))
 
         layout.addStretch()
         return tab
@@ -337,6 +410,7 @@ class ConfigWindow(QWidget):
         method = self.cfg.get("push", "method", fallback="none").lower()
         if method == "email": self.push_email_radio.setChecked(True)
         elif method == "feishu": self.push_feishu_radio.setChecked(True)
+        elif method == "serverchan": self.push_serverchan_radio.setChecked(True)
         else: self.push_none_radio.setChecked(True)
 
         # 详细配置
@@ -347,6 +421,10 @@ class ConfigWindow(QWidget):
         self.auth.setText(self.cfg.get("email", "auth", fallback=""))
         self.feishu_webhook.setText(self.cfg.get("feishu", "webhook_url", fallback=""))
         self.feishu_secret.setText(self.cfg.get("feishu", "secret", fallback=""))
+        self.serverchan_sendkey.setText(self.cfg.get("serverchan", "sendkey", fallback=""))
+        
+        # 根据当前配置展开对应的配置组（不自动保存）
+        self.on_push_method_changed(auto_save=False)
 
     def save_config(self):
         # 检查 Outlook
@@ -381,6 +459,7 @@ class ConfigWindow(QWidget):
         if "push" not in self.cfg: self.cfg["push"] = {}
         if self.push_email_radio.isChecked(): self.cfg["push"]["method"] = "email"
         elif self.push_feishu_radio.isChecked(): self.cfg["push"]["method"] = "feishu"
+        elif self.push_serverchan_radio.isChecked(): self.cfg["push"]["method"] = "serverchan"
         else: self.cfg["push"]["method"] = "none"
 
         if "email" not in self.cfg: self.cfg["email"] = {}
@@ -394,7 +473,37 @@ class ConfigWindow(QWidget):
         self.cfg["feishu"]["webhook_url"] = self.feishu_webhook.text()
         self.cfg["feishu"]["secret"] = self.feishu_secret.text()
 
+        if "serverchan" not in self.cfg: self.cfg["serverchan"] = {}
+        self.cfg["serverchan"]["sendkey"] = self.serverchan_sendkey.text()
+
         # 物理保存
+        self._save_config_to_file()
+
+    def on_push_method_changed(self, auto_save=False):
+        """根据推送方式选择展开对应的配置组
+        
+        Args:
+            auto_save: 是否自动保存配置，默认为False
+        """
+        # 默认折叠所有配置组
+        self.email_collapsible.toggle_button.setChecked(False)
+        self.feishu_collapsible.toggle_button.setChecked(False)
+        self.serverchan_collapsible.toggle_button.setChecked(False)
+        
+        # 展开当前选中的推送方式对应的配置组
+        if self.push_email_radio.isChecked():
+            self.email_collapsible.toggle_button.setChecked(True)
+        elif self.push_feishu_radio.isChecked():
+            self.feishu_collapsible.toggle_button.setChecked(True)
+        elif self.push_serverchan_radio.isChecked():
+            self.serverchan_collapsible.toggle_button.setChecked(True)
+        
+        # 只有在auto_save为True时才保存配置
+        if auto_save:
+            self._save_config_to_file()
+
+    def _save_config_to_file(self):
+        """将配置保存到文件"""
         try:
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
                 self.cfg.write(f)

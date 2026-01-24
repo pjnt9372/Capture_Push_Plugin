@@ -94,6 +94,13 @@ class NotificationManager:
             self.register_sender("feishu", FeishuSender())
         except Exception as e:
             logger.warning(f"注册飞书发送器失败: {e}")
+        
+        # 注册Server酱推送
+        try:
+            from core.senders.serverchan_sender import ServerChanSender
+            self.register_sender("serverchan", ServerChanSender())
+        except Exception as e:
+            logger.warning(f"注册Server酱发送器失败: {e}")
     
     def register_sender(self, name, sender):
         """注册新的推送方式"""

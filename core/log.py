@@ -82,21 +82,54 @@ def get_config_path():
     return config_path
 
 
-def cleanup_old_logs(log_dir, max_total_size_mb=50):
+def cleanup_old_logs(log_dir, max_total_size_mb=50, max_days=7):
     """
-    清理旧日志文件，保持总大小在限制范围内。
+    清理旧日志文件，按大小和天数限制清理。
+    
+    Args:
+        log_dir: 日志目录路径
+        max_total_size_mb: 最大大小限制(MB)
+        max_days: 最大保留天数
     """
     try:
-        max_total_size = max_total_size_mb * 1024 * 1024
-        log_files = []
+        import time
+        
+        # 计算7天前的时间戳
+        seven_days_ago = time.time() - (max_days * 24 * 60 * 60)
+        
+        # 按大小清理的文件
+        size_cleanup_files = []
+        # 按天数清理的文件
+        day_cleanup_files = []
+        
         for f in log_dir.glob("*.log*"):
             if f.is_file():
-                log_files.append((f, f.stat().st_mtime, f.stat().st_size))
+                stat_info = f.stat()
+                mtime = stat_info.st_mtime
+                size = stat_info.st_size
+                
+                # 检查是否超过7天
+                if mtime < seven_days_ago:
+                    day_cleanup_files.append((f, mtime, size))
+                else:
+                    size_cleanup_files.append((f, mtime, size))
         
+        # 首先删除超过7天的文件
+        for file_info in day_cleanup_files:
+            expired_file, _, _ = file_info
+            try:
+                expired_file.unlink()
+                print(f"[*] 已自动删除超过{max_days}天的日志: {expired_file.name}")
+            except Exception as e:
+                print(f"[!] 无法删除过期日志文件 {expired_file.name}: {e}")
+        
+        # 对剩余文件按大小进行清理
+        log_files = size_cleanup_files
         # 按修改时间从旧到新排序
         log_files.sort(key=lambda x: x[1])
         
         total_size = sum(f[2] for f in log_files)
+        max_total_size = max_total_size_mb * 1024 * 1024
         
         while total_size > max_total_size and log_files:
             oldest_file, _, size = log_files.pop(0)
