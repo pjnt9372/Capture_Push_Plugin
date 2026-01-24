@@ -1,11 +1,17 @@
 name: Build and Release
 
 on:
-  # 仅 master 分支自动触发完整流程（构建 + 发布）
+  # 支持 master 和 Beta 分支自动触发
   push:
-    branches: [master]
-  # 允许手动触发（用于 Beta 测试 或 Dev 内部构建）
+    branches: [master, Beta]
+  # 允许手动触发
   workflow_dispatch:
+    inputs:
+      prerelease:
+        description: '是否标记为预发布版本'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   build:
@@ -23,41 +29,47 @@ jobs:
       - name: Validate VERSION format
         shell: powershell
         run: |
-           $ versionLine = Get-Content "VERSION" -TotalCount 1 -ErrorAction SilentlyContinue
-          if (-not  $ versionLine) {
+          $versionLine = Get-Content "VERSION" -TotalCount 1 -ErrorAction SilentlyContinue
+          if (-not $versionLine) {
             Write-Error "❌ VERSION file is missing or empty!"
             exit 1
           }
-           $ version =  $ versionLine.Trim()
-          if ( $ version -eq "") {
+          $version = $versionLine.Trim()
+          if ($version -eq "") {
             Write-Error "❌ VERSION file is empty!"
             exit 1
           }
 
-          Write-Host "VERSION content: ' $ version'"
+          Write-Host "VERSION content: '$version'"
 
-           $ stablePattern = '^\d+\.\d+\.\d+ $ '
-           $ betaPattern   = '^\d+\.\d+\.\d+_Beta $ '
-           $ devPattern    = '^\d+\.\d+\.\d+_Dev $ '
+          $stablePattern = '^\d+\.\d+\.\d+$'
+          $betaPattern   = '^\d+\.\d+\.\d+_Beta$'
+          $devPattern    = '^\d+\.\d+\.\d+_Dev$'
 
-           $ isManual = " $ {{ github.event_name }}" -eq "workflow_dispatch"
-           $ isMasterPush = " $ {{ github.ref }}" -eq "refs/heads/master"
+          $isMasterPush = "${{ github.ref }}" -eq "refs/heads/master"
+          $isBetaPush = "${{ github.ref }}" -eq "refs/heads/Beta"
 
-          if ( $ isMasterPush) {
-            # 自动构建必须是稳定版
-            if ( $ version -notmatch  $ stablePattern) {
-              Write-Error "❌ On 'master', VERSION must be 'x.x.x' (e.g., '1.2.3'). Found: ' $ version'"
+          if ($isMasterPush) {
+            # master 分支必须是稳定版
+            if ($version -notmatch $stablePattern) {
+              Write-Error "❌ On 'master', VERSION must be 'x.x.x' (e.g., '1.2.3'). Found: '$version'"
+              exit 1
+            }
+          } elseif ($isBetaPush) {
+            # Beta 分支必须带有 _Beta 后缀
+            if ($version -notmatch $betaPattern) {
+              Write-Error "❌ On 'Beta' branch, VERSION must be 'x.x.x_Beta'. Found: '$version'"
               exit 1
             }
           } else {
-            # 手动触发：只允许三种格式
-            if (-not ( $ version -match  $ stablePattern -or  $ version -match  $ betaPattern -or  $ version -match  $ devPattern)) {
-              Write-Error "❌ VERSION must be 'x.x.x', 'x.x.x_Beta', or 'x.x.x_Dev'. Found: ' $ version'"
+            # 手动触发：允许三种格式
+            if (-not ($version -match $stablePattern -or $version -match $betaPattern -or $version -match $devPattern)) {
+              Write-Error "❌ VERSION must be 'x.x.x', 'x.x.x_Beta', or 'x.x.x_Dev'. Found: '$version'"
               exit 1
             }
           }
 
-      # =============== 构建步骤（不变）===============
+      # =============== 构建步骤 ===============
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -78,16 +90,16 @@ jobs:
       - name: Create Portable Python Environment
         shell: powershell
         run: |
-           $ pyVersion = "3.11.9"
-           $ pyUrl = "https://www.python.org/ftp/python/ $ pyVersion/python- $ pyVersion-embed-amd64.zip"
-          Invoke-WebRequest -Uri  $ pyUrl -OutFile "python_embed.zip"
+          $pyVersion = "3.11.9"
+          $pyUrl = "https://www.python.org/ftp/python/$pyVersion/python-$pyVersion-embed-amd64.zip"
+          Invoke-WebRequest -Uri $pyUrl -OutFile "python_embed.zip"
           Expand-Archive -Path "python_embed.zip" -DestinationPath ".venv"
           
           cd .venv
-           $ pthFile = Get-ChildItem -Filter "python*._pth" | Select-Object -First 1
-           $ content = Get-Content  $ pthFile.Name
-           $ content =  $ content -replace '#import site', 'import site'
-           $ content | Set-Content  $ pthFile.Name
+          $pthFile = Get-ChildItem -Filter "python*._pth" | Select-Object -First 1
+          $content = Get-Content $pthFile.Name
+          $content = $content -replace '#import site', 'import site'
+          $content | Set-Content $pthFile.Name
           
           Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile "get-pip.py"
           .\python.exe get-pip.py --no-warn-script-location
@@ -101,10 +113,10 @@ jobs:
         shell: powershell
         run: |
           if (-not (Test-Path "ChineseSimplified.isl")) {
-             $ url = "https://raw.githubusercontent.com/kira-96/Inno-Setup-Chinese-Simplified-Translation/master/ChineseSimplified.isl"
-            Invoke-WebRequest -Uri  $ url -OutFile "ChineseSimplified.isl"
+            $url = "https://raw.githubusercontent.com/kira-96/Inno-Setup-Chinese-Simplified-Translation/master/ChineseSimplified.isl"
+            Invoke-WebRequest -Uri $url -OutFile "ChineseSimplified.isl"
           }
-          if ((Get-Content "ChineseSimplified.isl" -Raw) -notmatch "  $ LangOptions $  ") {
+          if ((Get-Content "ChineseSimplified.isl" -Raw) -notmatch "\[LangOptions\]") {
             throw "Invalid ChineseSimplified.isl"
           }
 
@@ -118,202 +130,44 @@ jobs:
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" Capture_Push_Lite_Setup.iss
 
-      - name: Upload Artifacts (always)
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Installers- $ {{ github.run_number }}
+          name: Installers-${{ github.run_number }}
           path: |
             Output/Capture_Push_Setup.exe
             Output/Capture_Push_Lite_Setup.exe
           retention-days: 3
 
-      # =============== 提取版本 ===============
+      # =============== 提取版本并准备发布 ===============
       - name: Extract Version
         shell: powershell
         run: |
-           $ version = (Get-Content "VERSION" | Select-Object -First 1).Trim()
-          Add-Content -Path  $ env:GITHUB_ENV -Value "APP_VERSION= $ version"
-           $ tagVersion = "v $ version" -replace "_", "-"
-          Add-Content -Path  $ env:GITHUB_ENV -Value "TAG_VERSION= $ tagVersion"
+          $version = (Get-Content "VERSION" | Select-Object -First 1).Trim()
+          Add-Content -Path $env:GITHUB_ENV -Value "APP_VERSION=$version"
+          $tagVersion = "v$version" -replace "_", "-"
+          Add-Content -Path $env:GITHUB_ENV -Value "TAG_VERSION=$tagVersion"
 
       # =============== 条件性发布 Release ===============
-      - name: Create Release (skip for _Dev)
+      - name: Create Release
         uses: softprops/action-gh-release@v2
-        if:  $ {{ !contains(env.APP_VERSION, '_Dev') }}  # ← 关键：跳过 _Dev
+        if: ${{ !contains(env.APP_VERSION, '_Dev') && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/Beta' || github.event_name == 'workflow_dispatch') }}
         with:
           files: |
             Output/Capture_Push_Setup.exe
             Output/Capture_Push_Lite_Setup.exe
-          tag_name:  $ {{ env.TAG_VERSION }}
-          name: Release  $ {{ env.APP_VERSION }}
+          tag_name: ${{ env.TAG_VERSION }}
+          name: Release ${{ env.APP_VERSION }}
           body: |
-            Version:  $ {{ env.APP_VERSION }}
-            Build:  $ {{ github.run_number }}
-            Trigger:  $ {{ github.event_name }}
+            Version: ${{ env.APP_VERSION }}
+            Build: ${{ github.run_number }}
+            Branch: ${{ github.ref_name }}
             
             ## Packages
-            - **Full**: Includes Python runtime (～200-500 MB)
-            - **Lite**: Program-only update (～2-10 MB)
+            - **Full**: Includes Python runtime (~200-500 MB)
+            - **Lite**: Program-only update (~2-10 MB)
           draft: false
-          prerelease:  $ {{ contains(env.APP_VERSION, '_Beta') }}
+          # 如果是 Beta 分支，或者版本号包含 _Beta，或者手动勾选了 prerelease，则标记为预发布
+          prerelease: ${{ github.ref == 'refs/heads/Beta' || contains(env.APP_VERSION, '_Beta') || github.event.inputs.prerelease == 'true' }}
         env:
-          GITHUB_TOKEN:  $ {{ secrets.GITHUB_TOKEN }}name: Build and Release
-
-on:
-  # 仅 master 分支自动触发完整流程（构建 + 发布）
-  push:
-    branches: [master]
-  # 允许手动触发（用于 Beta 测试 或 Dev 内部构建）
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: windows-latest
-    permissions:
-      contents: write
-    env:
-      PYTHONUTF8: 1
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # =============== 严格校验 VERSION 格式 ===============
-      - name: Validate VERSION format
-        shell: powershell
-        run: |
-           $ versionLine = Get-Content "VERSION" -TotalCount 1 -ErrorAction SilentlyContinue
-          if (-not  $ versionLine) {
-            Write-Error "❌ VERSION file is missing or empty!"
-            exit 1
-          }
-           $ version =  $ versionLine.Trim()
-          if ( $ version -eq "") {
-            Write-Error "❌ VERSION file is empty!"
-            exit 1
-          }
-
-          Write-Host "VERSION content: ' $ version'"
-
-           $ stablePattern = '^\d+\.\d+\.\d+ $ '
-           $ betaPattern   = '^\d+\.\d+\.\d+_Beta $ '
-           $ devPattern    = '^\d+\.\d+\.\d+_Dev $ '
-
-           $ isManual = " $ {{ github.event_name }}" -eq "workflow_dispatch"
-           $ isMasterPush = " $ {{ github.ref }}" -eq "refs/heads/master"
-
-          if ( $ isMasterPush) {
-            # 自动构建必须是稳定版
-            if ( $ version -notmatch  $ stablePattern) {
-              Write-Error "❌ On 'master', VERSION must be 'x.x.x' (e.g., '1.2.3'). Found: ' $ version'"
-              exit 1
-            }
-          } else {
-            # 手动触发：只允许三种格式
-            if (-not ( $ version -match  $ stablePattern -or  $ version -match  $ betaPattern -or  $ version -match  $ devPattern)) {
-              Write-Error "❌ VERSION must be 'x.x.x', 'x.x.x_Beta', or 'x.x.x_Dev'. Found: ' $ version'"
-              exit 1
-            }
-          }
-
-      # =============== 构建步骤（不变）===============
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install build dependencies
-        run: |
-          python -m pip install --upgrade pip
-
-      - name: Configure CMake for Tray App
-        run: |
-          cmake -S tray -B tray/build -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build Tray App
-        run: |
-          cmake --build tray/build --config Release
-
-      - name: Create Portable Python Environment
-        shell: powershell
-        run: |
-           $ pyVersion = "3.11.9"
-           $ pyUrl = "https://www.python.org/ftp/python/ $ pyVersion/python- $ pyVersion-embed-amd64.zip"
-          Invoke-WebRequest -Uri  $ pyUrl -OutFile "python_embed.zip"
-          Expand-Archive -Path "python_embed.zip" -DestinationPath ".venv"
-          
-          cd .venv
-           $ pthFile = Get-ChildItem -Filter "python*._pth" | Select-Object -First 1
-           $ content = Get-Content  $ pthFile.Name
-           $ content =  $ content -replace '#import site', 'import site'
-           $ content | Set-Content  $ pthFile.Name
-          
-          Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile "get-pip.py"
-          .\python.exe get-pip.py --no-warn-script-location
-          .\python.exe -m pip install -r ..\requirements.txt --no-warn-script-location
-          
-          Remove-Item "get-pip.py", "..\python_embed.zip"
-          cd ..
-          Write-Host "✅ Portable Python ready."
-
-      - name: Setup Inno Setup Chinese Support
-        shell: powershell
-        run: |
-          if (-not (Test-Path "ChineseSimplified.isl")) {
-             $ url = "https://raw.githubusercontent.com/kira-96/Inno-Setup-Chinese-Simplified-Translation/master/ChineseSimplified.isl"
-            Invoke-WebRequest -Uri  $ url -OutFile "ChineseSimplified.isl"
-          }
-          if ((Get-Content "ChineseSimplified.isl" -Raw) -notmatch "  $ LangOptions $  ") {
-            throw "Invalid ChineseSimplified.isl"
-          }
-
-      - name: Build Full Installer
-        shell: powershell
-        run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" Capture_Push_Setup.iss
-
-      - name: Build Lite Installer
-        shell: powershell
-        run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" Capture_Push_Lite_Setup.iss
-
-      - name: Upload Artifacts (always)
-        uses: actions/upload-artifact@v4
-        with:
-          name: Installers- $ {{ github.run_number }}
-          path: |
-            Output/Capture_Push_Setup.exe
-            Output/Capture_Push_Lite_Setup.exe
-          retention-days: 3
-
-      # =============== 提取版本 ===============
-      - name: Extract Version
-        shell: powershell
-        run: |
-           $ version = (Get-Content "VERSION" | Select-Object -First 1).Trim()
-          Add-Content -Path  $ env:GITHUB_ENV -Value "APP_VERSION= $ version"
-           $ tagVersion = "v $ version" -replace "_", "-"
-          Add-Content -Path  $ env:GITHUB_ENV -Value "TAG_VERSION= $ tagVersion"
-
-      # =============== 条件性发布 Release ===============
-      - name: Create Release (skip for _Dev)
-        uses: softprops/action-gh-release@v2
-        if:  $ {{ !contains(env.APP_VERSION, '_Dev') }}  # ← 关键：跳过 _Dev
-        with:
-          files: |
-            Output/Capture_Push_Setup.exe
-            Output/Capture_Push_Lite_Setup.exe
-          tag_name:  $ {{ env.TAG_VERSION }}
-          name: Release  $ {{ env.APP_VERSION }}
-          body: |
-            Version:  $ {{ env.APP_VERSION }}
-            Build:  $ {{ github.run_number }}
-            Trigger:  $ {{ github.event_name }}
-            
-            ## Packages
-            - **Full**: Includes Python runtime (～200-500 MB)
-            - **Lite**: Program-only update (～2-10 MB)
-          draft: false
-          prerelease:  $ {{ contains(env.APP_VERSION, '_Beta') }}
-        env:
-          GITHUB_TOKEN:  $ {{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
