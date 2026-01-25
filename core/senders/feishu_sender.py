@@ -78,7 +78,9 @@ class FeishuSender:
         # 如果配置了密钥，则添加签名参数
         if secret:
             timestamp = str(int(time.time()))
+            logger.debug(f"生成签名 - 时间戳: {timestamp}, 秘钥长度: {len(secret)}")
             sign = gen_sign(timestamp, secret)
+            logger.debug(f"生成的签名: {sign}")
             # 将时间戳和签名作为查询参数添加到webhook URL
             separator = '&' if '?' in webhook_url else '?'
             webhook_url_with_params = f"{webhook_url}{separator}timestamp={timestamp}&sign={sign}"
@@ -99,7 +101,11 @@ class FeishuSender:
                 logger.info("飞书消息发送成功")
                 return True
             else:
-                logger.error(f"飞书消息发送失败: {result.get('msg')}")
+                error_msg = result.get('msg', '')
+                logger.error(f"飞书消息发送失败: {error_msg}")
+                # 特别处理签名验证失败的错误
+                if "sign match fail" in error_msg or "timestamp is not within one hour" in error_msg:
+                    logger.error("可能是时间戳过期或签名计算错误，请检查系统时间和密钥配置")
                 return False
                 
         except Exception as e:

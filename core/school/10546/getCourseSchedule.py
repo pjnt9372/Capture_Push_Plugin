@@ -255,47 +255,61 @@ def parse_schedule(html):
             if not full_div or not full_div.get_text(strip=True):
                 continue
 
-            full_text = full_div.get_text("\n", strip=True)
-            course_blocks = re.split(r"-{5,}", full_text)
-
-            for block in course_blocks:
-                lines = [line.strip() for line in block.split("\n") if line.strip()]
+            # 先在HTML层面分割课程块，保留HTML标签
+            full_html = str(full_div)
+            # 使用正则分割，匹配 ----- 这种分隔符（至少5个减号）
+            course_html_blocks = re.split(r'(?:-{5,})<br\s*/?>', full_html)
+            
+            for block_html in course_html_blocks:
+                # 解析当前 HTML 块
+                block_soup = BeautifulSoup(block_html, "html.parser")
+                block_text = block_soup.get_text("\n", strip=True)
+                
+                lines = [line.strip() for line in block_text.split("\n") if line.strip()]
                 if len(lines) < 2:
                     continue
 
                 course_name = lines[0]
-                teacher_tag = full_div.find("font", {"title": "教师"})
+
+                # === 修复：从当前 block 的 lines 中找周次 ===
+                weeks = []
+                time_info_line = None
+                for line in lines:
+                    if "(周)" in line and not line.startswith("通知单编号") and "教室" not in line:
+                        time_info_line = line
+                        break
+
+                if time_info_line:
+                    # 使用更鲁棒的正则：匹配 (数字或数字范围)
+                    # 先提取 (周) 之前的部分，避免匹配到节次 [01-02节]
+                    week_part = time_info_line.split('(周)')[0]
+                    week_matches = re.findall(r'(\d+(?:-\d+)?)', week_part)
+                    for part in week_matches:
+                        if '-' in part:
+                            try:
+                                s, e = map(int, part.split('-'))
+                                weeks.extend(range(s, e + 1))
+                            except ValueError:
+                                continue
+                        else:
+                            try:
+                                weeks.append(int(part))
+                            except ValueError:
+                                continue
+
+                # === 提取教师和教室（修复：在当前 block 内查找）===
+                # 直接从 block_soup 中查找教师和教室信息
+                teacher_tag = block_soup.find("font", {"title": "教师"})
                 teacher = teacher_tag.get_text(strip=True) if teacher_tag else ""
-                room_tag = full_div.find("font", {"title": "教室"})
+                
+                room_tag = block_soup.find("font", {"title": "教室"})
                 room = room_tag.get_text(strip=True) if room_tag else ""
 
-                time_info = ""
-                time_tag = full_div.find("font", {"title": "周次(节次)"})
-                if time_tag:
-                    time_info = time_tag.get_text(strip=True)
+                # 如果没找到周次，设为全学期（保持兼容）
+                if not weeks:
+                    weeks = ["全学期"]
                 else:
-                    for line in lines:
-                        if "(周)" in line:
-                            time_info = line
-                            break
-
-                weeks = []
-                if time_info:
-                    week_match = re.search(r'([\d,\-\s]+)\(周\)', time_info)
-                    if week_match:
-                        week_str = week_match.group(1).replace(" ", "")
-                        for part in week_str.split(','):
-                            if '-' in part:
-                                try:
-                                    s, e = map(int, part.split('-'))
-                                    weeks.extend(range(s, e + 1))
-                                except ValueError:
-                                    continue
-                            else:
-                                try:
-                                    weeks.append(int(part))
-                                except ValueError:
-                                    continue
+                    weeks = sorted(set(weeks))
 
                 item = {
                     "星期": weekday,
@@ -304,7 +318,7 @@ def parse_schedule(html):
                     "课程名称": course_name,
                     "教师": teacher,
                     "教室": room,
-                    "周次列表": sorted(set(weeks)) if weeks else ["全学期"]
+                    "周次列表": weeks
                 }
                 schedule.append(item)
 

@@ -5,10 +5,10 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, 
     QFormLayout, QMessageBox, QCheckBox, QSpinBox, QHBoxLayout, 
     QGroupBox, QRadioButton, QButtonGroup, QTabWidget, QComboBox, 
-    QDateEdit, QApplication, QToolButton
+    QDateEdit, QApplication, QToolButton, QTimeEdit, QScrollArea
 )
 from PySide6.QtGui import QDesktopServices, QIcon
-from PySide6.QtCore import Qt, QDate, QUrl, QSize
+from PySide6.QtCore import Qt, QDate, QUrl, QSize, QTime
 
 # 动态获取基础目录和配置路径
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -124,6 +124,7 @@ class ConfigWindow(QWidget):
         # 标签页
         self.tabs = QTabWidget()
         self.tabs.addTab(self.create_basic_tab(), "基本配置")
+        self.tabs.addTab(self.create_school_time_tab(), "学校时间设置")
         self.tabs.addTab(self.create_push_tab(), "推送设置")
         self.tabs.addTab(self.create_about_tab(), "关于")
         layout.addWidget(self.tabs)
@@ -160,14 +161,10 @@ class ConfigWindow(QWidget):
         self.username = QLineEdit()
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.Password)
-        self.first_monday = QDateEdit()
-        self.first_monday.setCalendarPopup(True)
-        self.first_monday.setDisplayFormat("yyyy-MM-dd")
 
         form.addRow("选择院校", self.school_combo)
         form.addRow("学号", self.username)
         form.addRow("密码", self.password)
-        form.addRow("第一周周一", self.first_monday)
         layout.addLayout(form)
 
         loop_group = QGroupBox("循环检测配置")
@@ -211,6 +208,107 @@ class ConfigWindow(QWidget):
 
         layout.addStretch()
         return tab
+
+    def create_school_time_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
+        form = QFormLayout()
+        
+        self.first_monday = QDateEdit()
+        self.first_monday.setCalendarPopup(True)
+        self.first_monday.setDisplayFormat("yyyy-MM-dd")
+        form.addRow("第一周周一", self.first_monday)
+        
+        self.morning_count = QSpinBox()
+        self.morning_count.setRange(0, 10)
+        self.morning_count.valueChanged.connect(self.update_class_time_inputs)
+        form.addRow("上午几节课", self.morning_count)
+        
+        self.afternoon_count = QSpinBox()
+        self.afternoon_count.setRange(0, 10)
+        self.afternoon_count.valueChanged.connect(self.update_class_time_inputs)
+        form.addRow("下午几节课", self.afternoon_count)
+        
+        self.evening_count = QSpinBox()
+        self.evening_count.setRange(0, 10)
+        self.evening_count.valueChanged.connect(self.update_class_time_inputs)
+        form.addRow("晚上几节课", self.evening_count)
+        
+        self.class_duration = QSpinBox()
+        self.class_duration.setRange(1, 120)
+        self.class_duration.setSuffix(" 分钟")
+        self.class_duration.valueChanged.connect(self.recalculate_class_times)
+        form.addRow("一节课时长", self.class_duration)
+        
+        self.first_class_start = QTimeEdit()
+        self.first_class_start.setDisplayFormat("HH:mm")
+        self.first_class_start.timeChanged.connect(self.recalculate_class_times)
+        form.addRow("第一节课开始时间", self.first_class_start)
+        
+        layout.addLayout(form)
+        
+        layout.addWidget(QLabel("各节课开始时间 (可手动修改):"))
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        self.class_times_container = QWidget()
+        self.class_times_layout = QVBoxLayout(self.class_times_container)
+        scroll.setWidget(self.class_times_container)
+        layout.addWidget(scroll)
+        
+        self.class_time_edits = []
+        
+        return tab
+
+    def update_class_time_inputs(self):
+        # 彻底清除旧的布局内容
+        while self.class_times_layout.count():
+            item = self.class_times_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                # 递归清除子布局
+                self._clear_layout(item.layout())
+        
+        self.class_time_edits = []
+        
+        total = self.morning_count.value() + self.afternoon_count.value() + self.evening_count.value()
+        for i in range(total):
+            row = QHBoxLayout()
+            row.addWidget(QLabel(f"第 {i+1} 节:"))
+            edit = QLineEdit()
+            row.addWidget(edit)
+            self.class_time_edits.append(edit)
+            self.class_times_layout.addLayout(row)
+        
+        self.recalculate_class_times()
+
+    def _clear_layout(self, layout):
+        """递归清除布局及其子项"""
+        if layout is not None:
+            while layout.count():
+                item = layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+                elif item.layout():
+                    self._clear_layout(item.layout())
+
+    def recalculate_class_times(self):
+        if not hasattr(self, 'class_time_edits') or not self.class_time_edits:
+            return
+            
+        start_time = self.first_class_start.time()
+        duration = self.class_duration.value()
+        
+        # 简单推算：假设每节课之间没有休息时间（或者用户可以在推算后手动微调）
+        # 实际学校通常有课间休息，所以这只是一个基准
+        for i, edit in enumerate(self.class_time_edits):
+            current_time = start_time.addSecs(i * duration * 60)
+            if not edit.text(): # 只在为空时自动填充，避免覆盖手动修改？
+                # 实际上用户可能想重置，所以如果是由 spinbox 触发的，可能应该覆盖
+                pass
+            edit.setText(current_time.toString("HH:mm"))
 
     def create_push_tab(self):
         tab = QWidget()
@@ -387,6 +485,24 @@ class ConfigWindow(QWidget):
         self.username.setText(self.cfg.get("account", "username", fallback=""))
         self.password.setText(self.cfg.get("account", "password", fallback=""))
         
+        # 学校时间设置
+        self.morning_count.setValue(self.cfg.getint("school_time", "morning_count", fallback=4))
+        self.afternoon_count.setValue(self.cfg.getint("school_time", "afternoon_count", fallback=4))
+        self.evening_count.setValue(self.cfg.getint("school_time", "evening_count", fallback=2))
+        self.class_duration.setValue(self.cfg.getint("school_time", "class_duration", fallback=45))
+        
+        start_time_str = self.cfg.get("school_time", "first_class_start", fallback="08:30")
+        self.first_class_start.setTime(QTime.fromString(start_time_str, "HH:mm"))
+        
+        # 加载具体的各节课时间
+        self.update_class_time_inputs()
+        class_times_str = self.cfg.get("school_time", "class_times", fallback="")
+        if class_times_str:
+            times = class_times_str.split(",")
+            for i, t in enumerate(times):
+                if i < len(self.class_time_edits):
+                    self.class_time_edits[i].setText(t.strip())
+        
         date_str = self.cfg.get("semester", "first_monday", fallback="")
         if date_str:
             self.first_monday.setDate(QDate.fromString(date_str, "yyyy-MM-dd"))
@@ -438,6 +554,16 @@ class ConfigWindow(QWidget):
         self.cfg["account"]["school_code"] = self.school_combo.currentData()
         self.cfg["account"]["username"] = self.username.text()
         self.cfg["account"]["password"] = self.password.text()
+
+        if "school_time" not in self.cfg: self.cfg["school_time"] = {}
+        self.cfg["school_time"]["morning_count"] = str(self.morning_count.value())
+        self.cfg["school_time"]["afternoon_count"] = str(self.afternoon_count.value())
+        self.cfg["school_time"]["evening_count"] = str(self.evening_count.value())
+        self.cfg["school_time"]["class_duration"] = str(self.class_duration.value())
+        self.cfg["school_time"]["first_class_start"] = self.first_class_start.time().toString("HH:mm")
+        
+        class_times = [edit.text() for edit in self.class_time_edits]
+        self.cfg["school_time"]["class_times"] = ",".join(class_times)
 
         if "semester" not in self.cfg: self.cfg["semester"] = {}
         self.cfg["semester"]["first_monday"] = self.first_monday.date().toString("yyyy-MM-dd")

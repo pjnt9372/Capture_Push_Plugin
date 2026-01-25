@@ -71,6 +71,9 @@ enum LogLevel {
     LOG_ERROR
 };
 
+// 全局日志级别，默认为INFO
+LogLevel g_current_log_level = LOG_INFO;
+
 // 函数前向声明
 std::string GetInstallPathFromRegistry();
 std::string GetExecutableDirectory();
@@ -305,6 +308,15 @@ void CloseLogging() {
 
 // 安全日志写入（带时间戳，仅写入文件）
 void LogMessage(const std::string& message, LogLevel level) {
+    // 检查是否为配置加载相关日志，如果是则不受全局日志级别影响
+    bool is_config_load_message = (message.find("Reading config.ini from AppData") != std::string::npos ||
+                                   message.find("Config loaded from AppData") != std::string::npos);
+    
+    // 根据全局日志级别过滤日志，但配置加载相关日志除外
+    if (!is_config_load_message && level < g_current_log_level) {
+        return; // 如果消息级别低于当前设置的最低级别，则不输出
+    }
+    
     // 获取日志级别字符串
     std::string levelStr;
     switch(level) {
@@ -399,7 +411,29 @@ void ReadLoopConfig() {
             value.erase(0, value.find_first_not_of(" \t"));
             value.erase(value.find_last_not_of(" \t") + 1);
             
-            if (current_section == "loop_getCourseGrades") {
+            // 处理日志级别配置
+            if (current_section == "logging") {
+                if (key == "level") {
+                    if (value == "DEBUG") {
+                        g_current_log_level = LOG_DEBUG;
+                        LogMessage("Log level set to DEBUG", LOG_DEBUG);
+                    } else if (value == "INFO") {
+                        g_current_log_level = LOG_INFO;
+                        LogMessage("Log level set to INFO", LOG_DEBUG);
+                    } else if (value == "WARN" || value == "WARNING") {
+                        g_current_log_level = LOG_WARN;
+                        LogMessage("Log level set to WARN", LOG_DEBUG);
+                    } else if (value == "ERROR") {
+                        g_current_log_level = LOG_ERROR;
+                        LogMessage("Log level set to ERROR", LOG_DEBUG);
+                    } else if (value == "CRITICAL") {
+                        g_current_log_level = LOG_ERROR; // 映射到最高级别
+                        LogMessage("Log level set to CRITICAL (mapped to ERROR)", LOG_DEBUG);
+                    } else {
+                        LogMessage("Unknown log level: " + value + ", keeping default INFO level", LOG_WARN);
+                    }
+                }
+            } else if (current_section == "loop_getCourseGrades") {
                 if (key == "enabled") {
                     g_loop_config.grade_enabled = (value == "True" || value == "true" || value == "1");
                 } else if (key == "time") {
@@ -761,6 +795,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     */
     
     InitLogging();
+    // 在应用程序启动时读取配置以设置日志级别
+    ReadLoopConfig();
     LogMessage("Application starting...", LOG_INFO);
     LogMessage("Built with version: " + std::string(APP_VERSION), LOG_INFO);
 

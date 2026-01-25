@@ -1,10 +1,7 @@
 name: Build and Release
 
 on:
-  # 支持 master 和 Beta 分支自动触发
-  push:
-    branches: [master, Beta]
-  # 允许手动触发
+  # 仅允许手动触发，禁用自动构建
   workflow_dispatch:
     inputs:
       prerelease:
