@@ -278,15 +278,81 @@ def format_full_schedule(courses, week_count):
     """
     logger.info(f"格式化完整课表消息，总周数: {week_count}")
     
-    lines = [f"📖 本学期完整课表（共{week_count}周）", "=" * 25]
+    # 按课程名称分组，收集所有时间和地点信息
+    course_details = {}
     for day_courses in courses:
         if not day_courses:
             continue
-        # 假设 day_courses 中的课程星期相同
-        weekday = day_courses[0]['星期']
-        lines.append(f"\n【周{weekday}】")
         for course in day_courses:
-            lines.append(f"- {course['课程名称']} ({course['开始小节']}-{course['结束小节']}节) @ {course['教室']}")
+            course_name = course['课程名称']
+            if course_name not in course_details:
+                course_details[course_name] = []
+            
+            # 获取周次信息
+            weeks_list = course['周次列表']
+            if isinstance(weeks_list, list) and weeks_list:
+                if weeks_list == ["全学期"]:
+                    week_range = "全学期"
+                else:
+                    # 将周次列表按数字排序
+                    sorted_weeks = sorted([w for w in weeks_list if isinstance(w, int)], key=int)
+                    if len(sorted_weeks) == 1:
+                        week_range = f"{sorted_weeks[0]}"
+                    else:
+                        # 找出连续区间
+                        week_ranges = []
+                        start = sorted_weeks[0]
+                        end = sorted_weeks[0]
+                        
+                        for i in range(1, len(sorted_weeks)):
+                            if sorted_weeks[i] == end + 1:
+                                end = sorted_weeks[i]
+                            else:
+                                if start == end:
+                                    week_ranges.append(f"{start}")
+                                else:
+                                    week_ranges.append(f"{start}-{end}")
+                                start = end = sorted_weeks[i]
+                        
+                        if start == end:
+                            week_ranges.append(f"{start}")
+                        else:
+                            week_ranges.append(f"{start}-{end}")
+                        
+                        week_range = "、".join(week_ranges)
+            else:
+                week_range = "?"
+            
+            # 添加时间和地点信息
+            time_location = {
+                'week_range': week_range,
+                'weekday': course['星期'],
+                'start_period': course['开始小节'],
+                'end_period': course['结束小节'],
+                'classroom': course['教室']
+            }
+            
+            # 检查是否已有相同的时间地点信息，避免重复
+            if time_location not in course_details[course_name]:
+                course_details[course_name].append(time_location)
+    
+    lines = [f"📖 本学期完整课表（共{week_count}周）", "=" * 25]
+    
+    # 按课程名称排序输出
+    for course_name in sorted(course_details.keys()):
+        time_locations = course_details[course_name]
+        
+        # 按时间和地点排序
+        sorted_times = sorted(time_locations, key=lambda x: (x['week_range'], x['weekday'], x['start_period']))
+        
+        # 格式化时间和地点信息
+        time_place_info = []
+        for tl in sorted_times:
+            time_place_info.append(f"第{tl['week_range']}周，周{tl['weekday']}，第{tl['start_period']}-{tl['end_period']}节课；地点：{tl['classroom']}")
+        
+        # 合并同一课程的所有时间地点信息
+        time_place_str = "；".join(time_place_info)
+        lines.append(f"课程名称：{course_name}（{time_place_str}）")
     
     content = "\n".join(lines)
     logger.debug(f"文本内容预览: {content[:200]}...")

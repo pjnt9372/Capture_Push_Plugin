@@ -285,23 +285,35 @@ def fetch_and_push_tomorrow_schedule(force_update=False):
             first_monday_str, "%Y-%m-%d"
         ).date()
 
-        tomorrow = datetime.date.today() + datetime.timedelta(days=1)
-        # 计算明天的周次和星期
-        delta = (tomorrow - first_monday).days
-        if delta < 0:
-            logger.warning("明天未到开学日期，跳过推送")
+        today = datetime.date.today()
+        # 获取今天的周次和星期
+        week, weekday = calc_week_and_weekday(first_monday)
+        
+        if weekday is None:
+            logger.warning("未到开学日期，跳过推送")
             return
-        week = delta // 7 + 1
-        weekday = delta % 7 + 1
 
-        logger.info(f"推送明日课表: 第{week}周 周{weekday}")
+        # 计算明天的星期（如果是周日，则明天是周一）
+        tomorrow_weekday = weekday + 1
+        if tomorrow_weekday > 7:  # 如果明天是下一周的周一
+            tomorrow_weekday = 1
+            # 如果今天是周日，则推送下周一的课表
+            if weekday == 7:  
+                target_week = week + 1
+            else:  # 如果今天是周六，明天是周日，仍属于本周
+                target_week = week
+        else:  # 明天仍在本周
+            target_week = week
+
+        logger.info(f"推送明日课表: 第{target_week}周 周{tomorrow_weekday}")
         
         # 检查是否已推送
         state_file = STATE_DIR / "last_push_tomorrow.txt"
-        tomorrow_str = tomorrow.strftime("%Y-%m-%d")
+        # 使用目标日期而非实际明天日期，确保同一天多次运行不会重复推送
+        target_date_str = (first_monday + datetime.timedelta(weeks=target_week-1, days=tomorrow_weekday-1)).strftime("%Y-%m-%d")
         if not force_update and state_file.exists():
             with open(state_file, "r") as f:
-                if f.read().strip() == tomorrow_str:
+                if f.read().strip() == target_date_str:
                     logger.info("明日课表已推送，跳过")
                     return
 
@@ -336,23 +348,23 @@ def fetch_and_push_tomorrow_schedule(force_update=False):
         # 过滤并合并
         filtered = []
         for mc in manual_courses:
-            if mc["星期"] == weekday:
+            if mc["星期"] == tomorrow_weekday and (target_week in mc["周次列表"] or "全学期" in mc["周次列表"]):
                 filtered.append(mc)
         
         for c in schedule:
-            if c["星期"] == weekday and (week in c["周次列表"] or "全学期" in c["周次列表"]):
+            if c["星期"] == tomorrow_weekday and (target_week in c["周次列表"] or "全学期" in c["周次列表"]):
                 is_covered = False
                 for p in range(c["开始小节"], c["结束小节"] + 1):
-                    if (weekday, p) in manual_occupied:
+                    if (tomorrow_weekday, p) in manual_occupied:
                         is_covered = True
                         break
                 if not is_covered:
                     filtered.append(c)
 
-        send_schedule_mail(filtered, week, weekday)
+        send_schedule_mail(filtered, target_week, tomorrow_weekday)
         
         with open(state_file, "w") as f:
-            f.write(tomorrow_str)
+            f.write(target_date_str)
         logger.info("明日课表推送完成")
     except Exception as e:
         logger.error(f"fetch_and_push_tomorrow_schedule 异常: {e}", exc_info=True)
@@ -558,7 +570,9 @@ def fetch_and_push_full_semester_schedule(force_update=False):
             week_counts = []
             for week_num in sorted(semester_schedule.keys()):
                 week_days = semester_schedule[week_num]
-                formatted_schedule.append(week_days)
+                # 将每周的天数课程列表展开成单个天数课程列表
+                for day_list in week_days:
+                    formatted_schedule.append(day_list)
                 week_counts.append(week_num)
             
             if formatted_schedule:
