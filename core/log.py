@@ -12,45 +12,70 @@ import os
 import configparser
 import datetime
 import shutil
+import zipfile
 from pathlib import Path
+
+# 用于获取用户桌面路径
+try:
+    import winreg
+except ImportError:
+    # 非Windows系统时的备用方案
+    pass
 
 
 def pack_logs():
     """
-    将 AppData 中的日志目录打包成一个文本文件。
+    将 AppData 中的日志目录打包成ZIP压缩包并放在桌面。
     返回打包文件的路径。
     """
+    def get_desktop_path():
+        """获取真实的桌面路径，优先使用Windows API"""
+        try:
+            # Windows系统使用注册表获取真实桌面路径
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders")
+            desktop_path = winreg.QueryValueEx(key, "Desktop")[0]
+            winreg.CloseKey(key)
+            return Path(desktop_path)
+        except (NameError, OSError):
+            # 如果无法使用Windows API，则回退到用户目录下的Desktop
+            try:
+                import ctypes
+                from ctypes import wintypes
+                # 使用CSIDL_DESKTOP常量获取桌面路径
+                CSIDL_DESKTOP = 0
+                buf = ctypes.create_unicode_buffer(wintypes.MAX_PATH)
+                ctypes.windll.shell32.SHGetFolderPathW(None, CSIDL_DESKTOP, None, 0, buf)
+                return Path(buf.value)
+            except:
+                # 最终回退到用户目录下的Desktop
+                return Path(os.path.expanduser("~/Desktop"))
+
     try:
         localappdata = os.environ.get('LOCALAPPDATA')
         if not localappdata:
             raise RuntimeError("无法获取 LOCALAPPDATA 环境变量")
         
+        desktop_path = get_desktop_path()
         log_dir = Path(localappdata) / 'Capture_Push'
         if not log_dir.exists():
             raise FileNotFoundError(f"日志目录不存在: {log_dir}")
         
         # 确定输出文件名和路径
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        archive_name = f"capture_push_crash_report_{timestamp}.txt"
-        archive_path = log_dir / archive_name
+        archive_name = f"capture_push_log_report_{timestamp}.zip"
+        archive_path = desktop_path / archive_name
 
-        with open(archive_path, 'w', encoding='utf-8') as archive_file:
-            archive_file.write(f"Capture_Push 崩溃报告 - 生成时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            archive_file.write("=" * 80 + "\n\n")
-
-            # 遍历日志目录，查找所有 .log 文件
+        # 创建ZIP文件并添加日志文件
+        with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # 添加所有日志文件
             for log_file_path in log_dir.glob("*.log"):
-                if log_file_path == archive_path:  # 跳过当前正在写的归档文件
-                    continue
-                archive_file.write(f"文件: {log_file_path.name}\n")
-                archive_file.write("-" * 40 + "\n")
-                try:
-                    with open(log_file_path, 'r', encoding='utf-8') as f:
-                        archive_file.write(f.read())
-                except Exception as e:
-                    archive_file.write(f"读取文件失败: {e}\n")
-                archive_file.write("\n" + "-" * 40 + "\n\n")
-
+                zipf.write(log_file_path, log_file_path.name)
+            
+            # 添加配置文件（如果有）
+            config_file = log_dir / 'config.ini'
+            if config_file.exists():
+                zipf.write(config_file, config_file.name)
+        
         return str(archive_path)
     except Exception as e:
         print(f"打包日志失败: {e}")
@@ -179,8 +204,14 @@ def init_logger(module_name):
     cleanup_old_logs(appdata_dir)
     
     # 2. 读取配置文件获取日志级别
-    config = configparser.ConfigParser()
-    config.read(str(config_path), encoding='utf-8')
+    try:
+        from core.config_manager import load_config
+        config = load_config()
+    except ImportError:
+        # 兜底：如果无法从 config_manager 导入，尝试普通读取
+        config = configparser.ConfigParser()
+        config.read(str(config_path), encoding='utf-8')
+    
     log_level_str = config.get('logging', 'level', fallback='DEBUG')
     log_level = getattr(logging, log_level_str.upper(), logging.DEBUG)
     

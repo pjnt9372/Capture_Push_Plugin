@@ -46,6 +46,7 @@ Capture_Push 是一个课程成绩和课表自动追踪推送系统，能够自�
 - **C++ 日志**：托盘程序包含完整的日志记录
 - **路径处理**：打包后自动使用用户可写目录存储日志
 - **日志级别**：支持 INFO、DEBUG、ERROR、WARNING 等多个级别
+- **日志打包**：支持将日志打包成ZIP文件便于故障排查
 
 ### 2. 依赖管理
 - **uv 支持**：现代化依赖管理工具支持
@@ -55,7 +56,16 @@ Capture_Push 是一个课程成绩和课表自动追踪推送系统，能够自�
 ### 3. 配置管理
 - **配置文件**：支持 `config.ini` 配置文件
 - **运行模式**：支持 DEV（开发）和 BUILD（生产）两种模式
+- **加密存储**：配置文件中的敏感信息（如账号密码）使用 Windows DPAPI 加密存储
 - **灵活配置**：支持账户、邮箱、循环检测等多种配置
+- **导出功能**：用户可通过关于界面导出明文配置文件（需要输入教务系统密码）
+
+## 用户界面功能
+
+### 配置导出
+- **明文导出**：在关于界面提供配置文件导出功能
+- **安全验证**：导出配置需要输入教务系统登录密码
+- **清除配置**：支持清除现有配置文件
 
 ## 项目结构
 
@@ -68,18 +78,44 @@ Capture_Push/
 │   │   │   ├── getCourseSchedule.py
 │   │   │   └── __init__.py
 │   │   └── __init__.py      # 院校管理入口
-│   ├── getCourseGrades.py  # 成绩获取模块（已废弃）
-│   ├── getCourseSchedule.py # 课表获取模块（已废弃）
-│   ├── push.py            # 推送模块（原 mailer）
-│   └── go.py              # 主执行模块
-├── gui/                   # GUI 界面模块
-│   └── gui.py             # 配置界面
-├── tray/                  # 系统托盘程序
-│   └── tray_app.cpp       # C++ 托盘程序
-├── installer.py           # 安装脚本
-├── build_installer_exe.py # 打包脚本
-├── config.ini             # 配置文件
-└── Capture_Push_Setup.iss # Inno Setup 配置
+│   ├── senders/             # 推送发送器模块
+│   │   ├── email_sender.py  # 邮件推送实现
+│   │   ├── feishu_sender.py # 飞书机器人推送实现
+│   │   ├── serverchan_sender.py # Server酱推送实现
+│   │   └── __init__.py
+│   ├── utils/               # 工具模块
+│   │   └── dpapi.py         # Windows DPAPI加密实现
+│   ├── config_manager.py    # 统一配置管理器（加密/解密）
+│   ├── push.py              # 推送模块
+│   ├── go.py                # 主执行模块
+│   └── log.py               # 日志管理模块
+├── gui/                     # GUI 界面模块
+│   ├── gui.py               # GUI入口
+│   ├── config_window.py     # 主配置窗口（含配置导出/清除功能）
+│   ├── grades_window.py     # 成绩查看窗口
+│   ├── schedule_window.py   # 课表查看窗口
+│   ├── dialogs.py           # 对话框组件
+│   └── widgets.py           # 自定义UI组件
+├── tray/                    # 系统托盘程序
+│   └── tray_app.cpp         # C++ 托盘程序
+├── developer_tools/         # 开发者工具
+│   ├── EXTENSION_GUIDE.md   # 扩展开发指南
+│   ├── GUI_MODULAR_DESIGN.md # GUI模块化设计说明
+│   ├── build.py             # 构建脚本
+│   ├── register_or_undo.py  # 模块注册/注销脚本
+│   └── changconfig.py       # 配置管理工具
+├── .gitignore
+├── Capture_Push_Lite_Setup.iss # Inno Setup 配置（轻量版）
+├── Capture_Push_Setup.iss   # Inno Setup 配置（完整版）
+├── ChineseSimplified.isl    # 中文语言文件
+├── README.md                # 项目说明文档
+├── config.ini               # 配置文件模板
+├── config.md                # 配置文件详解
+├── build_installer_exe.py   # 打包脚本
+├── requirements.txt         # Python依赖
+├── pyproject.toml           # 项目配置
+└── uv.lock                  # 依赖锁定文件
+```
 ```
 
 ## 安装与使用
@@ -132,3 +168,7 @@ uv pip install -r requirements.txt
 
 程序运行产生的日志和配置文件存储在：
 - `%LOCALAPPDATA%\Capture_Push` 
+
+## 版本说明
+
+- **对应版本**： 大于等于0.2.0

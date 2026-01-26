@@ -11,8 +11,10 @@ from email.mime.multipart import MIMEMultipart
 # 导入统一日志模块和配置路径
 try:
     from log import init_logger, get_config_path
+    from config_manager import load_config
 except ImportError:
     from core.log import init_logger, get_config_path
+    from core.config_manager import load_config
 
 # 延迟初始化日志（在第一次调用时初始化）
 _logger = None
@@ -37,11 +39,8 @@ def _get_config_path():
 def load_mail_config():
     """加载邮件配置"""
     logger = _get_logger()
-    config_path = _get_config_path()
-    cfg = configparser.ConfigParser()
-    logger.info(f"加载配置文件: {config_path}")
-    cfg.read(str(config_path), encoding="utf-8")
-    return cfg
+    logger.info("加载并自动解密配置文件")
+    return load_config()
 
 
 class EmailSender:

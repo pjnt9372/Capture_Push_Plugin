@@ -10,8 +10,10 @@ from pathlib import Path
 
 try:
     from log import init_logger, get_config_path
+    from config_manager import load_config
 except ImportError:
     from core.log import init_logger, get_config_path
+    from core.config_manager import load_config
 
 # 延迟初始化
 _logger = None
@@ -44,10 +46,7 @@ class FeishuSender:
     
     def send(self, subject, content):
         logger = _get_logger()
-        config_path = _get_config_path()
-        
-        cfg = configparser.ConfigParser()
-        cfg.read(str(config_path), encoding='utf-8')
+        cfg = load_config()
         
         try:
             webhook_url = cfg.get("feishu", "webhook_url", fallback="").strip()

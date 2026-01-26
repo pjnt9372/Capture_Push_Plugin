@@ -12,8 +12,10 @@ from PySide6.QtCore import Qt
 BASE_DIR = Path(__file__).resolve().parent.parent
 try:
     from log import get_config_path, get_log_file_path
+    from config_manager import load_config
 except ImportError:
     from core.log import get_config_path, get_log_file_path
+    from core.config_manager import load_config
 
 try:
     from school import get_school_module
@@ -25,8 +27,7 @@ APPDATA_DIR = get_log_file_path('gui').parent
 
 def get_current_school_code():
     """从配置文件中获取当前院校代码"""
-    cfg = configparser.ConfigParser()
-    cfg.read(CONFIG_FILE, encoding="utf-8")
+    cfg = load_config()
     return cfg.get("account", "school_code", fallback="10546")
 
 class GradesViewerWindow(QWidget):

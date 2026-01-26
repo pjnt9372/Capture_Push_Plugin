@@ -10,8 +10,10 @@ import os
 # 导入统一日志模块和配置路径
 try:
     from log import init_logger, get_config_path
+    from config_manager import load_config
 except ImportError:
     from core.log import init_logger, get_config_path
+    from core.config_manager import load_config
 
 # 延迟初始化日志（在第一次调用时初始化）
 _logger = None
@@ -91,11 +93,7 @@ class ServerChanSender:
             bool: 发送是否成功
         """
         logger = _get_logger()
-        config_path = _get_config_path()
-
-        cfg = configparser.ConfigParser()
-        logger.info(f"加载配置文件: {config_path}")
-        cfg.read(str(config_path), encoding="utf-8")
+        cfg = load_config()
 
         try:
             sendkey = cfg.get("serverchan", "sendkey", fallback="").strip()

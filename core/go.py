@@ -14,6 +14,7 @@ if str(BASE_DIR) not in sys.path:
 
 from core.push import send_grade_mail, send_schedule_mail, send_today_schedule_mail, send_full_schedule_mail
 from core.school import get_school_module
+from core.config_manager import load_config
 
 # 导入统一配置路径管理（AppData 目录）
 from core.log import get_config_path, get_log_file_path, init_logger, pack_logs
@@ -36,13 +37,6 @@ STATE_DIR.mkdir(parents=True, exist_ok=True)
 GRADE_STATE_FILE = STATE_DIR / "last_grades.json"
 SCHEDULE_STATE_FILE = STATE_DIR / "last_schedule_day.txt"
 MANUAL_SCHEDULE_FILE = APPDATA_DIR / "manual_schedule.json"
-
-
-# ---------- 配置 ----------
-def load_config():
-    cfg = configparser.ConfigParser()
-    cfg.read(CONFIG_FILE, encoding="utf-8")
-    return cfg
 
 
 # ---------- 院校相关 ----------
@@ -599,7 +593,7 @@ def main():
     parser.add_argument("--push-tomorrow", action="store_true", help="推送明日课表")
     parser.add_argument("--push-next-week", action="store_true", help="推送下周全周课表")
     parser.add_argument("--push-full-schedule", action="store_true", help="推送完整学期课表")
-    parser.add_argument("--pack-logs", action="store_true", help="打包日志文件用于崩溃上报")
+    parser.add_argument("--pack-logs", action="store_true", help="打包日志文件用于日志上报")
     parser.add_argument("--check-update", action="store_true", help="检查软件更新")
     parser.add_argument("--force", action="store_true", help="强制从网络更新,忽略循环检测")
     args = parser.parse_args()
@@ -641,9 +635,9 @@ def main():
         logger.info("执行: pack_logs")
         report_path = pack_logs()
         if report_path:
-            print(f"✅ 崩溃报告已生成: {report_path}")
+            print(f"✅ 日志报告已生成: {report_path}")
         else:
-            print("❌ 崩溃报告生成失败")
+            print("❌ 日志报告生成失败")
     if args.check_update:
         logger.info("执行: check_update")
         from core.updater import Updater

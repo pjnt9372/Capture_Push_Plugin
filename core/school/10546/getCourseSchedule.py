@@ -18,6 +18,7 @@ if str(BASE_DIR) not in sys.path:
 
 # 导入统一日志模块（AppData 目录）
 from core.log import init_logger, get_config_path, get_log_file_path
+from core.config_manager import load_config
 
 # 初始化日志（如果失败直接崩溃）
 logger = init_logger('getCourseSchedule')
@@ -30,9 +31,8 @@ APPDATA_DIR = get_log_file_path('getCourseSchedule').parent
 
 # ===== 2. 读取运行模式 =====
 def get_run_mode():
-    config = configparser.ConfigParser()
     try:
-        config.read(CONFIG_PATH, encoding='utf-8')
+        config = load_config()
         mode = config.get('run_model', 'model', fallback='BUILD').strip().upper()
         if mode not in ('DEV', 'BUILD'):
             logger.warning(f"未知运行模式 '{mode}'，默认使用 BUILD")
@@ -103,9 +103,8 @@ def login(username, password):
 # ===== 5. 循环检测配置读取 =====
 def get_loop_config():
     """读取循环检测配置"""
-    config = configparser.ConfigParser()
     try:
-        config.read(CONFIG_PATH, encoding='utf-8')
+        config = load_config()
         enabled = config.getboolean('loop_getCourseSchedule', 'enabled', fallback=False)
         interval = config.getint('loop_getCourseSchedule', 'time', fallback=3600)
         logger.info(f"循环检测配置: enabled={enabled}, interval={interval}秒")
@@ -394,8 +393,7 @@ def main():
     force_update = '--force' in sys.argv
     
     # 从配置文件读取账号密码
-    config = configparser.ConfigParser()
-    config.read(CONFIG_PATH, encoding='utf-8')
+    config = load_config()
     username = config.get('account', 'username', fallback='')
     password = config.get('account', 'password', fallback='')
     

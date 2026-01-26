@@ -14,8 +14,10 @@ from PySide6.QtCore import Qt, QDate, QUrl, QSize, QTime
 BASE_DIR = Path(__file__).resolve().parent.parent
 try:
     from log import get_config_path, get_log_file_path
+    from config_manager import load_config, save_config as save_config_manager
 except ImportError:
     from core.log import get_config_path, get_log_file_path
+    from core.config_manager import load_config, save_config as save_config_manager
 
 try:
     from school import get_available_schools
@@ -107,8 +109,7 @@ class ConfigWindow(QWidget):
         font.setPointSize(10)
         self.setFont(font)
 
-        self.cfg = configparser.ConfigParser()
-        self.cfg.read(CONFIG_FILE, encoding="utf-8")
+        self.cfg = load_config()
 
         self.init_ui()
         self.load_config()
@@ -355,6 +356,7 @@ class ConfigWindow(QWidget):
         self.feishu_collapsible = self.create_collapsible_group("飞书机器人配置", "feishu_group")
         feishu_form = QFormLayout(self.feishu_collapsible.content_area)
         self.feishu_webhook = QLineEdit()
+        self.feishu_webhook.setEchoMode(QLineEdit.Password)
         self.feishu_secret = QLineEdit()
         self.feishu_secret.setEchoMode(QLineEdit.Password)  # 密钥字段设为密码模式
         feishu_form.addRow("Webhook URL", self.feishu_webhook)
@@ -449,6 +451,63 @@ class ConfigWindow(QWidget):
         """)
         crash_report_btn.clicked.connect(self.send_crash_report)
 
+        # 配置导出按钮
+        export_config_btn = QPushButton("导出明文配置")
+        export_config_btn.setCursor(Qt.PointingHandCursor)
+        export_config_btn.setStyleSheet("""
+            QPushButton {
+                border: 1px solid #0078d4;
+                color: #0078d4;
+                padding: 5px 15px;
+                border-radius: 3px;
+                background: white;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background: #0078d4;
+                color: white;
+            }
+        """)
+        export_config_btn.clicked.connect(self.export_plaintext_config)
+
+        # 清除配置按钮
+        clear_config_btn = QPushButton("清除现有配置")
+        clear_config_btn.setCursor(Qt.PointingHandCursor)
+        clear_config_btn.setStyleSheet("""
+            QPushButton {
+                border: 1px solid #ff6b6b;
+                color: #ff6b6b;
+                padding: 5px 15px;
+                border-radius: 3px;
+                background: white;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background: #ff6b6b;
+                color: white;
+            }
+        """)
+        clear_config_btn.clicked.connect(self.clear_config)
+
+        # 调整日志级别和运行模式按钮
+        adjust_log_run_btn = QPushButton("调整日志/运行模式")
+        adjust_log_run_btn.setCursor(Qt.PointingHandCursor)
+        adjust_log_run_btn.setStyleSheet("""
+            QPushButton {
+                border: 1px solid #28a745;
+                color: #28a745;
+                padding: 5px 15px;
+                border-radius: 3px;
+                background: white;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background: #28a745;
+                color: white;
+            }
+        """)
+        adjust_log_run_btn.clicked.connect(self.adjust_logging_and_run_model)
+
         # 其他信息
         author_label = QLabel("开发者: pjnt9372")
         author_label.setStyleSheet("font-size: 12px; color: #999999;")
@@ -461,12 +520,22 @@ class ConfigWindow(QWidget):
         layout.addWidget(github_btn)
         layout.addSpacing(10)
         
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        btn_row.addWidget(update_btn)
-        btn_row.addWidget(crash_report_btn)
-        btn_row.addStretch()
-        layout.addLayout(btn_row)
+        # 第一行按钮
+        btn_row1 = QHBoxLayout()
+        btn_row1.addStretch()
+        btn_row1.addWidget(update_btn)
+        btn_row1.addWidget(crash_report_btn)
+        btn_row1.addStretch()
+        layout.addLayout(btn_row1)
+        
+        # 第二行按钮
+        btn_row2 = QHBoxLayout()
+        btn_row2.addStretch()
+        btn_row2.addWidget(export_config_btn)
+        btn_row2.addWidget(clear_config_btn)
+        btn_row2.addWidget(adjust_log_run_btn)
+        btn_row2.addStretch()
+        layout.addLayout(btn_row2)
         
         layout.addSpacing(20)
         layout.addWidget(author_label)
@@ -605,6 +674,160 @@ class ConfigWindow(QWidget):
         # 物理保存
         self._save_config_to_file()
 
+    def export_plaintext_config(self):
+        """导出明文配置文件"""
+        from PySide6.QtWidgets import QInputDialog, QFileDialog
+        import os
+        
+        # 首先验证用户身份 - 需要输入教务系统密码
+        password, ok = QInputDialog.getText(self, "身份验证", "请输入教务系统登录密码以导出明文配置:", 
+                                           QLineEdit.Password)
+        if not ok:
+            return
+        
+        # 获取当前配置
+        current_password = self.password.text() if hasattr(self, 'password') and self.password else ""
+        
+        # 验证密码（这里我们比较用户在界面上输入的密码和他们想要验证的密码）
+        # 实际应用中可能需要从配置中获取密码进行验证
+        if password != current_password:
+            # 如果当前界面上没有密码，尝试从配置加载验证
+            try:
+                from core.config_manager import load_config
+                cfg = load_config()
+                stored_username = cfg.get("account", "username", fallback="")
+                stored_password = cfg.get("account", "password", fallback="")
+                
+                if password != stored_password:
+                    QMessageBox.critical(self, "验证失败", "密码不正确，无法导出配置文件。")
+                    return
+            except Exception:
+                QMessageBox.critical(self, "验证失败", "密码不正确，无法导出配置文件。")
+                return
+        
+        # 如果验证成功，导出配置
+        try:
+            from core.config_manager import load_config
+            cfg = load_config()
+            
+            # 选择保存位置
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, "保存明文配置文件", os.path.expanduser("~/config_export.ini"), 
+                "配置文件 (*.ini);;所有文件 (*)"
+            )
+            
+            if not file_path:
+                return
+                
+            # 保存配置到文件
+            with open(file_path, 'w', encoding='utf-8') as f:
+                cfg.write(f)
+            
+            QMessageBox.information(self, "导出成功", f"明文配置已保存到：\n{file_path}\n\n请注意保管此文件，其中包含敏感信息。")
+        except Exception as e:
+            QMessageBox.critical(self, "导出失败", f"导出配置文件时出错：\n{str(e)}")
+
+    def clear_config(self):
+        """清除现有配置"""
+        reply = QMessageBox.question(
+            self, "确认清除", 
+            "您确定要清除所有配置信息吗？此操作不可恢复。\n\n清除后需要重新配置所有信息。",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                # 获取配置文件路径
+                config_path = Path(CONFIG_FILE)
+                
+                # 创建一个空配置
+                empty_cfg = configparser.ConfigParser()
+                
+                # 添加基本配置节
+                empty_cfg["logging"] = {"level": "INFO"}
+                empty_cfg["run_model"] = {"model": "BUILD"}
+                empty_cfg["account"] = {"school_code": "10546", "username": "", "password": ""}
+                empty_cfg["push"] = {"method": "none"}
+                
+                # 保存空配置
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    empty_cfg.write(f)
+                
+                # 重新加载配置
+                self.cfg = load_config()
+                self.load_config()
+                
+                QMessageBox.information(self, "清除成功", "配置已清除，请重新配置各项信息。")
+            except Exception as e:
+                QMessageBox.critical(self, "清除失败", f"清除配置文件时出错：\n{str(e)}")
+
+    def adjust_logging_and_run_model(self):
+        """调整日志级别和运行模式"""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QDialogButtonBox
+        
+        # 创建对话框
+        dialog = QDialog(self)
+        dialog.setWindowTitle("调整日志级别和运行模式")
+        dialog.resize(400, 150)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # 日志级别选择
+        log_layout = QHBoxLayout()
+        log_layout.addWidget(QLabel("日志级别:"))
+        log_combo = QComboBox()
+        log_combo.addItems(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+        
+        # 从当前配置加载值
+        current_log_level = self.cfg.get("logging", "level", fallback="INFO")
+        log_combo.setCurrentText(current_log_level)
+        
+        log_layout.addWidget(log_combo)
+        layout.addLayout(log_layout)
+        
+        # 运行模式选择
+        run_layout = QHBoxLayout()
+        run_layout.addWidget(QLabel("运行模式:"))
+        run_combo = QComboBox()
+        run_combo.addItems(["DEV", "BUILD"])
+        
+        # 从当前配置加载值
+        current_run_model = self.cfg.get("run_model", "model", fallback="BUILD")
+        run_combo.setCurrentText(current_run_model)
+        
+        run_layout.addWidget(run_combo)
+        layout.addLayout(run_layout)
+        
+        # 按钮
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        # 显示对话框并处理结果
+        if dialog.exec() == QDialog.Accepted:
+            try:
+                # 更新配置
+                if "logging" not in self.cfg:
+                    self.cfg["logging"] = {}
+                if "run_model" not in self.cfg:
+                    self.cfg["run_model"] = {}
+                    
+                self.cfg["logging"]["level"] = log_combo.currentText()
+                self.cfg["run_model"]["model"] = run_combo.currentText()
+                
+                # 保存配置
+                from core.config_manager import save_config
+                save_config(self.cfg)
+                
+                # 重新加载配置以确保更改生效
+                self.cfg = load_config()
+                
+                QMessageBox.information(self, "修改成功", 
+                                      f"日志级别已设置为 {log_combo.currentText()}，\n运行模式已设置为 {run_combo.currentText()}")
+            except Exception as e:
+                QMessageBox.critical(self, "修改失败", f"保存配置时出错：\n{str(e)}")
+
     def on_push_method_changed(self, auto_save=False):
         """根据推送方式选择展开对应的配置组
         
@@ -644,13 +867,12 @@ class ConfigWindow(QWidget):
             self.serverchan_collapsible.toggle_button.setChecked(True)
 
     def _save_config_to_file(self):
-        """将配置保存到文件"""
+        """将配置保存到文件并加密"""
         try:
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                self.cfg.write(f)
-            QMessageBox.information(self, "保存成功", "配置已成功保存到本地。")
+            save_config_manager(self.cfg)
+            QMessageBox.information(self, "保存成功", "配置已成功保存并加密。")
         except Exception as e:
-            QMessageBox.critical(self, "保存失败", f"写入配置文件时出错：\n{str(e)}")
+            QMessageBox.critical(self, "保存失败", f"写入加密配置文件时出错：\n{str(e)}")
 
     def show_grades_viewer(self):
         if not hasattr(self, 'grades_win') or not self.grades_win.isVisible():
@@ -763,11 +985,11 @@ class ConfigWindow(QWidget):
             QMessageBox.critical(self, "错误", f"检查更新时出错：\n{str(e)}")
 
     def send_crash_report(self):
-        """发送崩溃报告"""
+        """发送日志报告"""
         reply = QMessageBox.question(
             self,
-            "崩溃上报",
-            "是否要打包所有日志文件并生成崩溃报告？\n\n报告将保存在您的桌面或 AppData 目录中。",
+            "日志上报",
+            "是否要打包所有日志文件并生成日志报告？\n\n报告将保存在您的桌面。",
             QMessageBox.Yes | QMessageBox.No
         )
         
@@ -776,7 +998,7 @@ class ConfigWindow(QWidget):
                 from core.log import pack_logs
                 report_path = pack_logs()
                 if report_path:
-                    QMessageBox.information(self, "成功", f"崩溃报告已生成：\n{report_path}")
+                    QMessageBox.information(self, "成功", f"日志报告已生成：\n{report_path}")
                 else:
                     QMessageBox.warning(self, "失败", "日志文件打包失败，请检查程序是否具有写入权限。")
             except Exception as e:

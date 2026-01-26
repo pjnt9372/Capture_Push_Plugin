@@ -13,11 +13,13 @@
 #include <iomanip>    // for std::put_time
 #include <Shlobj.h>   // for SHGetKnownFolderPath
 #include <tlhelp32.h> // for process enumeration
+#include <wincrypt.h> // for DPAPI decryption
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "ole32.lib")  // for CoTaskMemFree
 #pragma comment(lib, "advapi32.lib")  // for registry functions
+#pragma comment(lib, "crypt32.lib")  // for DPAPI functions
 
 #define WM_TRAYICON (WM_USER + 1)
 #define WM_LOOP_TIMER (WM_USER + 2)
@@ -32,7 +34,6 @@
 #define ID_MENU_CHECK_UPDATE 1009
 #define ID_MENU_EXIT 1010
 #define ID_MENU_OPEN_CONFIG 1011
-#define ID_MENU_EDIT_CONFIG 1012
 #define TIMER_LOOP_CHECK 1001
 
 // Define version and product name macros (fallback if not defined by CMake)
@@ -80,7 +81,6 @@ std::string GetExecutableDirectory();
 std::string GetLogDirectory();
 void ExecutePythonCommand(const std::string& command_suffix);
 void ExecuteConfigGui();
-void EditConfigFile();
 void InitLogging();
 void CloseLogging();
 void LogMessage(const std::string& message, LogLevel level = LOG_INFO);
@@ -382,16 +382,48 @@ void ReadLoopConfig() {
     }
     std::string config_path = logDir + "\\config.ini";
     
-    std::ifstream config_file(config_path);
-    if (!config_file.is_open()) {
+    // 读取整个文件内容
+    std::ifstream file(config_path, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
         LogMessage("config.ini not found in AppData: " + config_path, LOG_INFO);
         return;
     }
+
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    std::vector<char> buffer(size);
+    if (size > 0) {
+        if (!file.read(buffer.data(), size)) {
+            LogMessage("Failed to read config file content.", LOG_ERROR);
+            return;
+        }
+    }
+    file.close();
+
+    std::string config_content;
     
+    // 尝试 DPAPI 解密
+    if (size > 0) {
+        DATA_BLOB data_in, data_out;
+        data_in.pbData = (BYTE*)buffer.data();
+        data_in.cbData = (DWORD)buffer.size();
+
+        if (CryptUnprotectData(&data_in, NULL, NULL, NULL, NULL, 0, &data_out)) {
+            config_content = std::string((char*)data_out.pbData, data_out.cbData);
+            LocalFree(data_out.pbData);
+            LogMessage("Config file decrypted using DPAPI.", LOG_DEBUG);
+        } else {
+            // 如果解密失败（可能是明文文件），直接作为 UTF-8 字符串
+            config_content = std::string(buffer.begin(), buffer.end());
+        }
+    }
+
+    std::istringstream config_stream(config_content);
     std::string line;
     std::string current_section;
     
-    while (std::getline(config_file, line)) {
+    while (std::getline(config_stream, line)) {
         line.erase(0, line.find_first_not_of(" \t\r\n"));
         line.erase(line.find_last_not_of(" \t\r\n") + 1);
         
@@ -456,7 +488,6 @@ void ReadLoopConfig() {
             }
         }
     }
-    config_file.close();
     LogMessage("Config loaded from AppData: grade_enabled=" + std::to_string(g_loop_config.grade_enabled) +
                ", schedule_enabled=" + std::to_string(g_loop_config.schedule_enabled), LOG_DEBUG);
 }
@@ -630,29 +661,6 @@ void ExecuteConfigGui() {
     }
 }
 
-// 用记事本打开配置文件（从 AppData 目录）
-void EditConfigFile() {
-    LogMessage("Opening config.ini in Notepad from AppData...", LOG_INFO);
-    
-    // 修复：从 AppData 目录读取配置文件
-    std::string logDir = GetLogDirectory();
-    if (logDir.empty()) {
-        LogMessage("Failed to get AppData directory.", LOG_INFO);
-        MessageBoxA(NULL, "无法获取 AppData 目录！", "错误", MB_OK | MB_ICONERROR);
-        return;
-    }
-    std::string config_path = logDir + "\\config.ini";
-
-    if (GetFileAttributesA(config_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
-        LogMessage("config.ini not found in AppData when trying to edit: " + config_path, LOG_INFO);
-        MessageBoxA(NULL, "配置文件不存在！\n请先使用配置工具创建配置。", "错误", MB_OK | MB_ICONERROR);
-        return;
-    }
-
-    LogMessage("Opening config file: " + config_path, LOG_INFO);
-    ShellExecuteA(NULL, "open", "notepad.exe", config_path.c_str(), NULL, SW_SHOW);
-}
-
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_CREATE:
@@ -707,7 +715,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 //AppendMenuW(hMenu, MF_STRING, ID_MENU_CHECK_UPDATE, L"检查更新");
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
                 AppendMenuW(hMenu, MF_STRING, ID_MENU_OPEN_CONFIG, L"打开配置工具");
-                AppendMenuW(hMenu, MF_STRING, ID_MENU_EDIT_CONFIG, L"更改配置文件");
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
                 AppendMenuW(hMenu, MF_STRING, ID_MENU_EXIT, L"退出");
                 
@@ -758,9 +765,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     break;
                 case ID_MENU_OPEN_CONFIG:
                     ExecuteConfigGui();
-                    break;
-                case ID_MENU_EDIT_CONFIG:
-                    EditConfigFile();
                     break;
                 case ID_MENU_EXIT:
                     LogMessage("User selected 'Exit'. Shutting down.", LOG_INFO);

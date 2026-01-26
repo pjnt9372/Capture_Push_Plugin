@@ -15,8 +15,10 @@ from PySide6.QtGui import QColor
 BASE_DIR = Path(__file__).resolve().parent.parent
 try:
     from log import get_config_path, get_log_file_path
+    from config_manager import load_config
 except ImportError:
     from core.log import get_config_path, get_log_file_path
+    from core.config_manager import load_config
 
 try:
     from school import get_school_module
@@ -37,8 +39,7 @@ MANUAL_SCHEDULE_FILE = APPDATA_DIR / "manual_schedule.json"
 
 def get_current_school_code():
     """从配置文件中获取当前院校代码"""
-    cfg = configparser.ConfigParser()
-    cfg.read(CONFIG_FILE, encoding="utf-8")
+    cfg = load_config()
     return cfg.get("account", "school_code", fallback="10546")
 
 class ScheduleViewerWindow(QWidget):
@@ -57,8 +58,7 @@ class ScheduleViewerWindow(QWidget):
         self.course_colors = {}
         
         # 加载配置
-        self.cfg = configparser.ConfigParser()
-        self.cfg.read(CONFIG_FILE, encoding="utf-8")
+        self.cfg = load_config()
         self.first_monday_str = self.cfg.get("semester", "first_monday", fallback="")
         
         # 加载学校时间设置
@@ -394,7 +394,7 @@ class ScheduleViewerWindow(QWidget):
     def load_data(self):
         try:
             # 重新加载配置以获取最新的时间设置
-            self.cfg.read(CONFIG_FILE, encoding="utf-8")
+            self.cfg = load_config()
             self.morning_count = self.cfg.getint("school_time", "morning_count", fallback=4)
             self.afternoon_count = self.cfg.getint("school_time", "afternoon_count", fallback=4)
             self.evening_count = self.cfg.getint("school_time", "evening_count", fallback=2)

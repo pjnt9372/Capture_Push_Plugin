@@ -10,8 +10,10 @@ from abc import ABC, abstractmethod
 # 导入统一日志模块
 try:
     from log import init_logger, get_config_path
+    from config_manager import load_config
 except ImportError:
     from core.log import init_logger, get_config_path
+    from core.config_manager import load_config
 
 # 导入具体的发送器实现
 try:
@@ -31,9 +33,7 @@ def get_push_method():
         str: 推送方式名称，默认为 'none'
     """
     try:
-        config_path = get_config_path()
-        cfg = configparser.ConfigParser()
-        cfg.read(str(config_path), encoding='utf-8')
+        cfg = load_config()
         method = cfg.get('push', 'method', fallback='none').strip().lower()
         logger.debug(f"读取推送配置: method={method}")
         return method
