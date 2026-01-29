@@ -36,11 +36,13 @@ except ImportError:
 
 # 导入自定义组件和对话框
 try:
-    from widgets import CourseBlock
-    from dialogs import CourseEditDialog
+    from . import custom_widgets, dialogs
+    CourseBlock = custom_widgets.CourseBlock
+    CourseEditDialog = dialogs.CourseEditDialog
 except ImportError:
-    from gui.widgets import CourseBlock
-    from gui.dialogs import CourseEditDialog
+    # 作为独立脚本运行时
+    from custom_widgets import CourseBlock
+    from dialogs import CourseEditDialog
 
 CONFIG_FILE = str(get_config_path())
 APPDATA_DIR = get_log_file_path('gui').parent

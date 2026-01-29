@@ -107,10 +107,10 @@ def handle_export_config_button_clicked(config_window_instance):
                 config_window_instance,
                 "导出配置",
                 "",
-                "JSON Files (*.json);;All Files (*)"
+                "INI Files (*.ini);;All Files (*)"
             )
             if file_path:
-                encrypted_path = Path("config.json.enc") # 假设加密文件路径
+                encrypted_path = Path("config.ini.enc") # 假设加密文件路径
                 if encrypted_path.exists():
                     plaintext_config = decrypt_file_to_str(str(encrypted_path))
                     with open(file_path, 'w', encoding='utf-8') as f:
@@ -145,11 +145,12 @@ def handle_import_config_button_clicked(config_window_instance):
                 config_window_instance,
                 "导入配置",
                 "",
-                "JSON Files (*.json);;All Files (*)"
+                "INI Files (*.ini);;All Files (*)"
             )
             if file_path:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    imported_config = json.load(f)
+                # Read the INI file directly using configparser
+                imported_config = configparser.ConfigParser()
+                imported_config.read(file_path, encoding='utf-8')
                 # 保存导入的配置（会自动加密）
                 save_config(imported_config)
                 # 通知所有选项卡刷新UI
@@ -193,17 +194,102 @@ def handle_toggle_autostart_button_clicked(config_window_instance, autostart_che
 def handle_refresh_grades(config_manager, parent_window):
     """处理“刷新成绩”按钮点击事件"""
     logger.info("刷新成绩按钮被点击")
-    QMessageBox.information(parent_window, "提示", "正在刷新成绩... (功能待实现)")
+    try:
+        import sys
+        import subprocess
+        from pathlib import Path
+        
+        # 获取当前执行文件的目录
+        BASE_DIR = Path(__file__).resolve().parent.parent.parent
+        go_script = str(BASE_DIR / "core" / "go.py")
+        
+        # 获取 pythonw.exe 路径
+        exe_dir = Path(sys.executable).parent
+        if (exe_dir / "pythonw.exe").exists():
+            py_exe = str(exe_dir / "pythonw.exe")
+        else:
+            py_exe = sys.executable
+        
+        logger.info("正在运行成绩刷新脚本...")
+        CREATE_NO_WINDOW = 0x08000000
+        subprocess.Popen([py_exe, go_script, "--fetch-grade", "--force"], 
+                        creationflags=CREATE_NO_WINDOW).wait()
+        
+        QMessageBox.information(parent_window, "成功", "成绩数据已开始刷新！")
+        logger.info("成绩数据刷新已启动")
+    except Exception as e:
+        logger.error(f"刷新成绩时发生错误: {e}")
+        QMessageBox.critical(parent_window, "错误", f"刷新成绩失败:\n{str(e)}")
 
 def handle_refresh_schedule(config_manager, parent_window):
     """处理“刷新课表”按钮点击事件"""
     logger.info("刷新课表按钮被点击")
-    QMessageBox.information(parent_window, "提示", "正在刷新课表... (功能待实现)")
+    try:
+        import sys
+        import subprocess
+        from pathlib import Path
+        
+        # 获取当前执行文件的目录
+        BASE_DIR = Path(__file__).resolve().parent.parent.parent
+        go_script = str(BASE_DIR / "core" / "go.py")
+        
+        # 获取 pythonw.exe 路径
+        exe_dir = Path(sys.executable).parent
+        if (exe_dir / "pythonw.exe").exists():
+            py_exe = str(exe_dir / "pythonw.exe")
+        else:
+            py_exe = sys.executable
+        
+        logger.info("正在运行课表刷新脚本...")
+        CREATE_NO_WINDOW = 0x08000000
+        subprocess.Popen([py_exe, go_script, "--fetch-schedule", "--force"], 
+                        creationflags=CREATE_NO_WINDOW).wait()
+        
+        QMessageBox.information(parent_window, "成功", "课表数据已开始刷新！")
+        logger.info("课表数据刷新已启动")
+    except Exception as e:
+        logger.error(f"刷新课表时发生错误: {e}")
+        QMessageBox.critical(parent_window, "错误", f"刷新课表失败:\n{str(e)}")
 
 def handle_import_plaintext_config(parent_window, config_manager):
     """处理“导入明文配置”按钮点击事件"""
     logger.info("导入明文配置按钮被点击")
-    QMessageBox.information(parent_window, "提示", "正在导入明文配置... (功能待实现)")
+    try:
+        # 1. 尝试调用Windows Hello认证
+        from core.utils.windows_auth import verify_user_credentials
+        auth_success = verify_user_credentials()
+
+        if auth_success:
+            logger.info("Windows Hello 认证成功")
+            from PySide6.QtWidgets import QFileDialog, QMessageBox
+            import configparser
+            
+            file_path, _ = QFileDialog.getOpenFileName(
+                parent_window,
+                "导入明文配置",
+                "",
+                "INI Files (*.ini);;All Files (*)"
+            )
+            if file_path:
+                # Read the INI file directly using configparser
+                imported_config = configparser.ConfigParser()
+                imported_config.read(file_path, encoding='utf-8')
+                # 保存导入的配置（会自动加密）
+                from core.config_manager import save_config
+                save_config(imported_config)
+                # 通知所有选项卡刷新UI
+                for tab_instance in parent_window.tab_instances.values():
+                    if hasattr(tab_instance, 'load_config'):
+                        tab_instance.load_config()
+                logger.info(f"配置已从 {file_path} 导入")
+                QMessageBox.information(parent_window, "成功", f"配置已从 {file_path} 导入！")
+        else:
+            logger.info("Windows Hello 认证失败或被取消")
+            QMessageBox.warning(parent_window, "认证失败", "无法导入配置：认证未通过。")
+
+    except Exception as e:
+        logger.error(f"处理导入明文配置时发生错误: {e}")
+        QMessageBox.critical(parent_window, "错误", f"导入明文配置时发生错误: {str(e)}")
 
 def handle_check_update_clicked(home_tab_instance):
 

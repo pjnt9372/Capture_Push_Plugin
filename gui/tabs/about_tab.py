@@ -71,7 +71,7 @@ class AboutTab(BaseTab):
         self.export_config_btn = QPushButton("导出明文配置")
         self.clear_config_btn = QPushButton("清除现有配置")
         self.repair_btn = QPushButton("修复安装")
-        self.adjust_log_run_btn = QPushButton("调整日志/运行模式")
+        self.developer_options_btn = QPushButton("开发者选项")
 
         author_label = QLabel("开发者: pjnt9372")
         author_label.setStyleSheet("font-size: 12px; color: #999999;")
@@ -91,7 +91,7 @@ class AboutTab(BaseTab):
         button_grid.addWidget(self.export_config_btn, 1, 0)
         button_grid.addWidget(self.clear_config_btn, 1, 1)
         button_grid.addWidget(self.repair_btn, 2, 0)
-        button_grid.addWidget(self.adjust_log_run_btn, 2, 1)
+        button_grid.addWidget(self.developer_options_btn, 2, 1)
         button_grid.setColumnStretch(0, 1)
         button_grid.setColumnStretch(1, 1)
         layout.addLayout(button_grid)
@@ -107,7 +107,7 @@ class AboutTab(BaseTab):
         self.export_config_btn.clicked.connect(parent_window.export_plaintext_config)
         self.clear_config_btn.clicked.connect(parent_window.clear_config)
         self.repair_btn.clicked.connect(parent_window.repair_installation)
-        self.adjust_log_run_btn.clicked.connect(parent_window.adjust_logging_and_run_model)
+        self.developer_options_btn.clicked.connect(parent_window.show_developer_options)
 
     # AboutTab 不需要 load_config 和 save_config
     def load_config(self):
