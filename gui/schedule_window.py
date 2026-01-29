@@ -9,7 +9,16 @@ from PySide6.QtWidgets import (
     QApplication, QLabel, QSpinBox
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QIcon
+
+# 导入日志模块
+try:
+    from log import init_logger
+except ImportError:
+    from core.log import init_logger
+
+# 初始化日志记录器
+logger = init_logger("schedule_window")
 
 # 动态获取基础目录和配置路径
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -48,6 +57,14 @@ class ScheduleViewerWindow(QWidget):
         super().__init__()
         self.setWindowTitle("Capture_Push · 课表查看")
         self.resize(1100, 850)
+        
+        # 设置窗口图标
+        try:
+            icon_path = BASE_DIR / "resources" / "app_icon.ico"
+            if icon_path.exists():
+                self.setWindowIcon(QIcon(str(icon_path)))
+        except Exception as e:
+            print(f"无法设置课表窗口图标: {e}")
         
         # 预设更柔和的浅色列表，适合黑色文字
         self.colors = [

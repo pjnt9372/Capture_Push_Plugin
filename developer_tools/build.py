@@ -183,6 +183,7 @@ def main():
     log("正在同步组件到构建空间...")
     copy_tree(project_root / "core", build_dir / "core")
     copy_tree(project_root / "gui", build_dir / "gui")
+    copy_tree(project_root / "resources", build_dir / "resources")
     
     # 复制必要文件到 build 根目录
     files_to_copy = ["VERSION", "config.ini", "generate_config.py", "Capture_Push_Setup.iss", "Capture_Push_Lite_Setup.iss", "ChineseSimplified.isl"]

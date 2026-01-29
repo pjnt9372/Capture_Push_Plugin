@@ -1,115 +1,90 @@
-# register_or_undo.py
+# register_school.py
 import os
 import sys
-import winreg
-import ctypes
 
-def is_admin():
-    """检查当前是否以管理员权限运行"""
-    try:
-        return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
-        return False
-
-def elevate_to_admin():
-    """以管理员身份重新启动当前脚本"""
-    print("⚠️  检测到当前未以管理员权限运行，正在请求提权...")
-    try:
-        ctypes.windll.shell32.ShellExecuteW(
-            None,
-            "runas",
-            sys.executable,
-            " ".join(sys.argv),
-            None,
-            1  # SW_SHOWNORMAL
-        )
-        sys.exit(0)  # 当前进程退出，由新进程接管
-    except Exception as e:
-        print(f"❌ 提权失败: {e}")
-        sys.exit(1)
 
 def get_project_root():
     """获取项目根目录（developer_tools 的父目录）"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     return os.path.dirname(script_dir)
 
-def write_registry(value_data):
-    """写入 InstallPath 到注册表"""
-    try:
-        # 打开/创建 HKLM\SOFTWARE\Capture_Push
-        key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Capture_Push")
-        winreg.SetValueEx(key, "InstallPath", 0, winreg.REG_SZ, value_data)
-        winreg.CloseKey(key)
-        print(f"\n✅ 成功注册路径到注册表！")
-        print(f"   键名: InstallPath")
-        print(f"   路径: {value_data}")
-    except PermissionError:
-        print("\n❌ 权限不足！请以管理员身份运行此脚本。")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n❌ 写入注册表失败: {e}")
-        sys.exit(1)
 
-def delete_registry():
-    """从注册表删除 Capture_Push 键"""
-    try:
-        # 尝试删除 HKLM\SOFTWARE\Capture_Push 及其子项
-        winreg.DeleteKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Capture_Push")
-        print("\n✅ 成功撤回注册表项！Capture_Push 键已删除。")
-    except FileNotFoundError:
-        print("\nℹ️  注册表中未找到 Capture_Push 键，无需撤回。")
-    except PermissionError:
-        print("\n❌ 权限不足！请以管理员身份运行此脚本。")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n❌ 撤回操作失败: {e}")
-        sys.exit(1)
-
-def ask_user_choice():
-    """向用户提问并返回选择：'register' 或 'undo'"""
-    print("🔧 Capture_Push 路径注册工具")
-    print("此操作将修改系统环境变量（需管理员权限）。\n")
+def register_school_module(school_code, school_name, module_path):
+    """注册新学校模块到 SCHOOL_MODULES 映射表"""
     
-    while True:
-        choice = input("请选择操作：\n"
-                       "  [1] 注册路径到系统环境变量\n"
-                       "  [2] 撤回已注册的路径\n"
-                       "请输入 1 或 2: ").strip()
+    school_init_path = os.path.join(get_project_root(), "core", "school", "__init__.py")
+    
+    try:
+        # 读取现有内容
+        with open(school_init_path, 'r', encoding='utf-8') as f:
+            content = f.read()
         
-        if choice == "1":
-            return "register"
-        elif choice == "2":
-            return "undo"
-        else:
-            print("⚠️  无效输入，请输入 1 或 2。\n")
+        # 查找 SCHOOL_MODULES 字典的开始和结束位置
+        lines = content.split('\n')
+        new_lines = []
+        in_school_modules = False
+        school_modules_indent = 0
+        
+        for i, line in enumerate(lines):
+            if line.strip().startswith('SCHOOL_MODULES = {'):
+                in_school_modules = True
+                school_modules_indent = len(line) - len(line.lstrip())
+                new_lines.append(line)
+            elif in_school_modules and line.strip() == "}" and len(line) - len(line.lstrip()) == school_modules_indent:
+                # 在字典结束前插入新学校
+                new_lines.append(f'{" " * (school_modules_indent + 4)}"{school_code}": "{module_path}",  # {school_name}')
+                new_lines.append(line)
+                in_school_modules = False
+            elif in_school_modules and f'"{school_code}":' in line:
+                # 如果学校代码已经存在，跳过这一行（替换旧条目）
+                continue
+            else:
+                new_lines.append(line)
+        
+        # 写回文件
+        with open(school_init_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(new_lines))
+        
+        print(f"\n✅ 成功注册新院校到 SCHOOL_MODULES 映射表！")
+        print(f"   院校代码: {school_code}")
+        print(f"   院校名称: {school_name}")
+        print(f"   模块路径: {module_path}")
+        
+    except Exception as e:
+        print(f"\n❌ 注册新院校失败: {e}")
+        sys.exit(1)
+
 
 def main():
-    action = ask_user_choice()
+    print("🎓 Capture_Push 院校注册工具")
+    print("此工具用于注册新院校模块。")
+    print("")
     
-    if action == "register":
-        project_root = get_project_root()
-        print(f"\n即将注册的项目根目录为:\n{project_root}\n")
-        confirm = input("确认注册？(y/n): ").strip().lower()
-        if confirm in ("y", "yes"):
-            write_registry(project_root)
-        else:
-            print("操作已取消。")
-    elif action == "undo":
-        confirm = input("\n确认撤回 Capture_Push 注册项？(y/n): ").strip().lower()
-        if confirm in ("y", "yes"):
-            delete_registry()
-        else:
-            print("操作已取消。")
+    print("📝 注册新院校")
+    school_code = input("请输入院校代码 (例如: 12345): ").strip()
+    school_name = input("请输入院校名称 (例如: 测试大学): ").strip()
+    module_path = input("请输入模块路径 (例如: core.school.12345): ").strip()
+    
+    if not school_code or not school_name or not module_path:
+        print("❌ 院校代码、名称和模块路径不能为空！")
+        sys.exit(1)
+    
+    print(f"\n即将注册新院校:\n"
+          f"  院校代码: {school_code}\n"
+          f"  院校名称: {school_name}\n"
+          f"  模块路径: {module_path}")
+    
+    confirm = input("\n确认注册？(y/n): ").strip().lower()
+    if confirm in ("y", "yes"):
+        register_school_module(school_code, school_name, module_path)
+    else:
+        print("操作已取消。")
+
 
 if __name__ == "__main__":
     # 检查是否在 Windows 上运行
     if not sys.platform.startswith('win'):
         print("❌ 此脚本仅支持 Windows 系统。")
         sys.exit(1)
-
-    # === 新增：自动提权逻辑 ===
-    if not is_admin():
-        elevate_to_admin()  # 自动请求管理员权限并重启
-    # =========================
 
     main()

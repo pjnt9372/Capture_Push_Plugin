@@ -127,6 +127,27 @@ jobs:
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" Capture_Push_Lite_Setup.iss
 
+      # =============== 生成校验和文件 ===============
+      - name: Generate Checksums
+        shell: powershell
+        run: |
+          $fullInstaller = "Output/Capture_Push_Setup.exe"
+          $liteInstaller = "Output/Capture_Push_Lite_Setup.exe"
+          
+          if (Test-Path $fullInstaller) {
+            $fullHash = (Get-FileHash -Path $fullInstaller -Algorithm SHA256).Hash
+            "$fullHash  $(Split-Path $fullInstaller -Leaf)" | Out-File -FilePath "Capture_Push_Setup.exe.sha256" -Encoding ASCII
+            Write-Host "Full installer SHA256: $fullHash"
+            echo "FULL_INSTALLER_SHA256=$fullHash" >> $env:GITHUB_ENV
+          }
+          
+          if (Test-Path $liteInstaller) {
+            $liteHash = (Get-FileHash -Path $liteInstaller -Algorithm SHA256).Hash
+            "$liteHash  $(Split-Path $liteInstaller -Leaf)" | Out-File -FilePath "Capture_Push_Lite_Setup.exe.sha256" -Encoding ASCII
+            Write-Host "Lite installer SHA256: $liteHash"
+            echo "LITE_INSTALLER_SHA256=$liteHash" >> $env:GITHUB_ENV
+          }
+
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -134,6 +155,7 @@ jobs:
           path: |
             Output/Capture_Push_Setup.exe
             Output/Capture_Push_Lite_Setup.exe
+            *.sha256
           retention-days: 3
 
       # =============== 提取版本并准备发布 ===============
@@ -163,6 +185,12 @@ jobs:
             ## Packages
             - **Full**: Includes Python runtime (~200-500 MB)
             - **Lite**: Program-only update (~2-10 MB)
+            
+            ## Integrity Checks
+            - **Full SHA256**: `${{ env.FULL_INSTALLER_SHA256 }}`
+            - **Lite SHA256**: `${{ env.LITE_INSTALLER_SHA256 }}`
+            
+            You can verify the integrity of the downloaded files using these hashes.
           draft: false
           # 如果是 Beta 分支，或者版本号包含 _Beta，或者手动勾选了 prerelease，则标记为预发布
           prerelease: ${{ github.ref == 'refs/heads/Beta' || contains(env.APP_VERSION, '_Beta') || github.event.inputs.prerelease == 'true' }}

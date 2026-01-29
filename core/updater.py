@@ -10,6 +10,7 @@ import urllib.request
 import json
 import subprocess
 import tempfile
+import hashlib
 from pathlib import Path
 from typing import Optional, Tuple
 from core.log import get_logger
@@ -293,6 +294,22 @@ class Updater:
             
             logger.info(f"正在下载: {target_name} ({file_size / 1024 / 1024:.2f} MB)")
             
+            # 尝试从资产中获取校验和信息
+            asset_checksum = None
+            if 'body' in release_data:
+                # 尝试从发布说明中提取校验和
+                body_text = release_data['body']
+                if 'sha256:' in body_text.lower():
+                    import re
+                    # 查找SHA256校验和（64个十六进制字符）
+                    checksum_matches = re.findall(r'[a-fA-F0-9]{64}', body_text)
+                    if checksum_matches:
+                        # 根据文件名尝试匹配正确的校验和
+                        for match in checksum_matches:
+                            if target_name.lower() in body_text.lower() or len(checksum_matches) == 1:
+                                asset_checksum = match
+                                break
+            
             # 下载到临时目录
             temp_dir = Path(tempfile.gettempdir()) / "Capture_Push_Update"
             temp_dir.mkdir(parents=True, exist_ok=True)
@@ -330,12 +347,52 @@ class Updater:
                     logger.error(f"代理下载也失败: {proxy_error}")
                     raise proxy_error  # 抛出异常以便外层捕获
             
-            logger.info(f"下载完成: {download_path}")
-            return str(download_path)
+            # 验证下载文件的完整性
+            calculated_checksum = self._calculate_file_hash(str(download_path))
+            
+            if asset_checksum:
+                if calculated_checksum.lower() == asset_checksum.lower():
+                    logger.info("文件完整性验证成功 - 校验和匹配")
+                else:
+                    logger.error(f"文件完整性验证失败! 期望校验和: {asset_checksum}, 实际校验和: {calculated_checksum}")
+                    os.remove(download_path)  # 删除可能被篡改的文件
+                    return None
+            else:
+                # 如果没有提供校验和，至少检查文件大小
+                downloaded_size = os.path.getsize(download_path)
+                if downloaded_size != file_size:
+                    logger.error(f"文件大小不匹配! 期望: {file_size}, 实际: {downloaded_size}")
+                    os.remove(download_path)  # 删除损坏的文件
+                    return None
+                else:
+                    logger.info(f"文件大小验证通过，校验和信息未提供，无法进行完整性校验")
+            
+            # 将安装包保存到程序目录，以便后续修复使用
+            saved_path = self.save_installer_locally(str(download_path))
+            
+            logger.info(f"下载完成: {saved_path}")
+            return saved_path
             
         except Exception as e:
             logger.error(f"下载更新失败: {e}")
             return None
+    
+    def _calculate_file_hash(self, filepath: str) -> str:
+        """
+        计算文件的SHA256哈希值
+        
+        Args:
+            filepath: 文件路径
+        
+        Returns:
+            文件的SHA256哈希值
+        """
+        hash_sha256 = hashlib.sha256()
+        with open(filepath, "rb") as f:
+            # 分块读取文件，避免大文件占用过多内存
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_sha256.update(chunk)
+        return hash_sha256.hexdigest()
     
     def install_update(self, installer_path: str, silent: bool = False) -> bool:
         """
@@ -430,9 +487,204 @@ class Updater:
         except Exception:
             # 如果读取注册表失败，假设不存在
             return False
+    
+    def verify_existing_installer(self, installer_path: str, expected_checksum: str = None) -> bool:
+        """
+        验证已存在的安装包的完整性
+        
+        Args:
+            installer_path: 安装包路径
+            expected_checksum: 期望的校验和（可选）
+        
+        Returns:
+            True 如果校验通过
+        """
+        if not os.path.exists(installer_path):
+            logger.error(f"安装包不存在: {installer_path}")
+            return False
+        
+        # 计算文件的SHA256校验和
+        calculated_checksum = self._calculate_file_hash(installer_path)
+        logger.info(f"正在验证安装包: {os.path.basename(installer_path)}")
+        logger.info(f"计算得到的校验和: {calculated_checksum}")
+        
+        if expected_checksum:
+            if calculated_checksum.lower() == expected_checksum.lower():
+                logger.info("安装包完整性验证成功 - 校验和匹配")
+                return True
+            else:
+                logger.error(f"安装包完整性验证失败! 期望: {expected_checksum}, 实际: {calculated_checksum}")
+                return False
+        else:
+            # 如果没有提供期望校验和，至少输出计算结果供参考
+            logger.warning(f"未提供期望校验和，计算得到: {calculated_checksum}")
+            return True  # 在这种情况下，我们认为只要文件存在就算通过
+    
+    def save_installer_locally(self, installer_path: str) -> str:
+        """
+        将安装包保存到程序目录下
+        
+        Args:
+            installer_path: 当前安装包路径
+        
+        Returns:
+            保存后的安装包路径
+        """
+        try:
+            # 获取安装目录
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 
+                                r"SOFTWARE\Capture_Push", 
+                                0, 
+                                winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+            install_path, _ = winreg.QueryValueEx(key, "InstallPath")
+            winreg.CloseKey(key)
+            
+            # 确定目标路径
+            target_dir = Path(install_path)
+            target_path = target_dir / os.path.basename(installer_path)
+            
+            # 复制文件到程序目录
+            import shutil
+            shutil.copy2(installer_path, target_path)
+            
+            logger.info(f"安装包已保存到程序目录: {target_path}")
+            return str(target_path)
+            
+        except Exception as e:
+            logger.error(f"保存安装包到程序目录失败: {e}")
+            # 如果无法获取安装目录，保存到当前目录
+            try:
+                local_path = Path.cwd() / os.path.basename(installer_path)
+                import shutil
+                shutil.copy2(installer_path, local_path)
+                logger.info(f"安装包已保存到当前目录: {local_path}")
+                return str(local_path)
+            except Exception as e2:
+                logger.error(f"保存安装包失败: {e2}")
+                return installer_path  # 返回原始路径
+    
+    def repair_installation(self, installer_path: str = None, expected_checksum: str = None, use_lite: bool = True) -> bool:
+        """
+        修复安装功能 - 重新校验哈希并安装安装包
+        
+        Args:
+            installer_path: 安装包路径，如果为None则尝试从程序目录获取
+            expected_checksum: 期望的校验和
+            use_lite: 是否使用轻量级安装包
+        
+        Returns:
+            是否修复成功
+        """
+        logger.info("开始执行修复安装...")
+        
+        # 如果没有提供安装包路径，尝试获取本地保存的安装包
+        if not installer_path:
+            try:
+                import winreg
+                key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 
+                                    r"SOFTWARE\Capture_Push", 
+                                    0, 
+                                    winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+                install_path, _ = winreg.QueryValueEx(key, "InstallPath")
+                winreg.CloseKey(key)
+                
+                # 尝试查找本地保存的安装包
+                install_dir = Path(install_path)
+                installer_candidates = []
+                if use_lite:
+                    installer_candidates = [install_dir / "Capture_Push_Lite_Setup.exe"]
+                else:
+                    installer_candidates = [install_dir / "Capture_Push_Setup.exe"]
+                
+                for candidate in installer_candidates:
+                    if candidate.exists():
+                        installer_path = str(candidate)
+                        logger.info(f"找到本地安装包: {installer_path}")
+                        break
+                
+                # 如果本地没有找到安装包，则下载新包
+                if not installer_path:
+                    logger.warning("未找到本地保存的安装包，正在下载...")
+                    
+                    # 检查是否有新版本可用
+                    update_info = self.check_update()
+                    if update_info:
+                        version, release_data = update_info
+                        logger.info(f"发现可用版本: {version}，正在下载安装包...")
+                    else:
+                        # 如果没有新版本，仍然尝试下载当前版本的安装包
+                        logger.info("正在获取最新版本信息以下载安装包...")
+                        # 直接使用API获取最新版本信息
+                        try:
+                            req = urllib.request.Request(
+                                self.API_URL,
+                                headers={'User-Agent': 'Capture_Push-Updater'}
+                            )
+                            with urllib.request.urlopen(req, timeout=10) as response:
+                                release_data = json.loads(response.read().decode('utf-8'))
+                        except Exception as api_error:
+                            logger.error(f"获取版本信息失败: {api_error}")
+                            # 尝试使用代理
+                            try:
+                                proxy_api_url = PROXY_URL_PREFIX + self.API_URL
+                                req_proxy = urllib.request.Request(
+                                    proxy_api_url,
+                                    headers={'User-Agent': 'Capture_Push-Updater'}
+                                )
+                                with urllib.request.urlopen(req_proxy, timeout=20) as response:
+                                    release_data = json.loads(response.read().decode('utf-8'))
+                            except Exception as proxy_error:
+                                logger.error(f"通过代理获取版本信息也失败: {proxy_error}")
+                                return False
+                    
+                    # 下载安装包
+                    installer_path = self.download_update(release_data, use_lite=use_lite)
+                    
+                    if not installer_path:
+                        logger.error("下载安装包失败")
+                        return False
+                    
+                    logger.info(f"安装包下载完成: {installer_path}")
+                    
+            except Exception as e:
+                logger.error(f"获取安装目录失败: {e}")
+                logger.info("正在尝试下载安装包...")
+                
+                # 尝试获取最新版本并下载
+                try:
+                    req = urllib.request.Request(
+                        self.API_URL,
+                        headers={'User-Agent': 'Capture_Push-Updater'}
+                    )
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        release_data = json.loads(response.read().decode('utf-8'))
+                    
+                    installer_path = self.download_update(release_data, use_lite=use_lite)
+                    
+                    if not installer_path:
+                        logger.error("下载安装包失败")
+                        return False
+                    
+                except Exception as download_error:
+                    logger.error(f"下载安装包失败: {download_error}")
+                    return False
+        
+        # 验证安装包完整性
+        if not self.verify_existing_installer(installer_path, expected_checksum):
+            logger.error("安装包完整性验证失败，无法继续修复")
+            return False
+        
+        # 保存安装包到程序目录（如果还没保存的话）
+        saved_path = self.save_installer_locally(installer_path)
+        
+        # 执行安装
+        logger.info("开始安装修复...")
+        return self.install_update(saved_path, silent=True)
 
 
 def check_for_updates_cli():
+
     """命令行检查更新"""
     updater = Updater()
     

@@ -21,6 +21,7 @@
 #pragma comment(lib, "advapi32.lib")  // for registry functions
 #pragma comment(lib, "crypt32.lib")  // for DPAPI functions
 
+#define IDI_ICON1 101
 #define WM_TRAYICON (WM_USER + 1)
 #define WM_LOOP_TIMER (WM_USER + 2)
 #define ID_MENU_GRADE_CHANGED 1001
@@ -730,7 +731,33 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             
             wcscpy_s(nid.szTip, L"Capture_Push Tray");
             
-            nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+            // 优先尝试从资源加载图标
+            nid.hIcon = LoadIconW(GetModuleHandle(NULL), MAKEINTRESOURCEW(IDI_ICON1));
+            
+            if (nid.hIcon) {
+                LogMessage("Successfully loaded icon from resources.", LOG_INFO);
+            } else {
+                // 如果资源加载失败，尝试从外部文件加载
+                std::string exe_dir = GetExecutableDirectory();
+                std::string icon_path = exe_dir + "\\resources\\app_icon.ico";
+                
+                HICON hCustomIcon = (HICON)LoadImageW(NULL, 
+                    std::wstring(icon_path.begin(), icon_path.end()).c_str(), 
+                    IMAGE_ICON, 
+                    0, 
+                    0, 
+                    LR_LOADFROMFILE | LR_DEFAULTSIZE);
+                
+                if (hCustomIcon) {
+                    nid.hIcon = hCustomIcon;
+                    LogMessage("Successfully loaded custom tray icon from file: " + icon_path, LOG_INFO);
+                } else {
+                    // 如果自定义图标加载失败，使用默认图标
+                    nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+                    LogMessage("Using default icon, failed to load from resources or file.", LOG_INFO);
+                }
+            }
+            
             Shell_NotifyIconW(NIM_ADD, &nid);
             
             ReadLoopConfig();
@@ -879,6 +906,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     WNDCLASSW wc = {};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
+    wc.hIcon = LoadIconW(hInstance, MAKEINTRESOURCEW(IDI_ICON1));
     wc.lpszClassName = CLASS_NAME;
     RegisterClassW(&wc);
     

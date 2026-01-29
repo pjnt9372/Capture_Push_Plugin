@@ -20,7 +20,7 @@ if(MSVC)
 endif()
 
 # 添加可执行文件（添加WIN32标志以隐藏控制台窗口，适用于最终发布版本）
-add_executable(Capture_Push_tray WIN32 tray_app.cpp)
+add_executable(Capture_Push_tray WIN32 tray_app.cpp resources.rc)
 
 # 链接必要的Windows库
 target_link_libraries(Capture_Push_tray 

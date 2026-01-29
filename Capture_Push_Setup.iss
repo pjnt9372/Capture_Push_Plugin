@@ -46,6 +46,7 @@ Name: autostart; Description: "开机自动启动托盘程序"; GroupDescription
 Source: ".venv\*"; DestDir: "{app}\.venv"; Flags: ignoreversion recursesubdirs
 Source: "core\*"; DestDir: "{app}\core"; Flags: ignoreversion recursesubdirs
 Source: "gui\*"; DestDir: "{app}\gui"; Flags: ignoreversion recursesubdirs
+Source: "resources\*"; DestDir: "{app}\resources"; Flags: ignoreversion recursesubdirs
 Source: "VERSION"; DestDir: "{app}"; Flags: ignoreversion
 Source: "config.ini"; DestDir: "{localappdata}\Capture_Push"; Flags: ignoreversion onlyifdoesntexist uninsneveruninstall
 Source: "generate_config.py"; DestDir: "{app}"; Flags: ignoreversion
