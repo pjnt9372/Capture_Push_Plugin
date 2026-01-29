@@ -1023,15 +1023,72 @@ class ConfigWindow(QWidget):
                 
                 updater = Updater()
                 # 使用轻量级安装包进行修复
-                success = updater.repair_installation(use_lite=True)
-                
-                if success:
-                    QMessageBox.information(self, "修复成功", "修复安装已完成，应用程序将退出，请重新启动。")
-                    QApplication.quit()
+                installer_path = updater.repair_installation(use_lite=True)
+                        
+                if installer_path:
+                    # 询问用户是否立即执行修复安装
+                    reply = QMessageBox.question(
+                        self,
+                        "执行修复安装",
+                        f"修复包已准备就绪，是否立即执行修复安装？\n\n"
+                        f"安装包: {os.path.basename(installer_path)}\n"
+                        f"注意：安装程序将关闭当前程序。",
+                        QMessageBox.Yes | QMessageBox.No
+                    )
+                            
+                    if reply == QMessageBox.Yes:
+                        # 先尝试关闭托盘程序
+                        self._close_tray_process()
+                                
+                        # 启动安装程序
+                        if updater.install_update(installer_path, silent=True):
+                            QMessageBox.information(self, "修复启动", "修复安装已启动，应用程序即将退出。")
+                            QApplication.quit()
+                        else:
+                            QMessageBox.critical(self, "修复失败", "启动修复安装程序失败。")
+                    else:
+                        QMessageBox.information(self, "修复准备就绪", f"修复包已保存到: {installer_path}\n您可以稍后手动执行修复安装。")
                 else:
                     QMessageBox.critical(self, "修复失败", "修复安装未能成功完成，请检查日志或重新下载安装包。")
             except Exception as e:
                 QMessageBox.critical(self, "修复错误", f"执行修复安装时出现错误：\n{str(e)}")
+
+    def _close_tray_process(self):
+        """尝试关闭托盘程序进程"""
+        try:
+            import psutil
+            import os
+            
+            # 获取当前进程PID，避免关闭自己
+            current_pid = os.getpid()
+            
+            # 遍历所有进程，查找托盘程序
+            for proc in psutil.process_iter(['pid', 'name', 'exe']):
+                try:
+                    pid = proc.info['pid']
+                    name = proc.info['name']
+                    exe = proc.info['exe']
+                    
+                    # 检查是否是托盘程序
+                    if name and 'Capture_Push_tray' in name:
+                        if exe and 'Capture_Push' in exe and pid != current_pid:
+                            proc.terminate()  # 请求进程终止
+                            proc.wait(timeout=5)  # 等待最多5秒让进程结束
+                            logger.info(f"已关闭托盘程序进程 PID: {pid}")
+                            break
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                    continue
+        except ImportError:
+            # 如果没有psutil，使用subprocess和taskkill
+            try:
+                import subprocess
+                subprocess.run(['taskkill', '/f', '/im', 'Capture_Push_tray.exe'], 
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+                logger.info("已尝试使用taskkill关闭托盘程序")
+            except Exception:
+                pass  # 如果taskkill也失败，忽略错误
+        except Exception as e:
+            logger.warning(f"关闭托盘程序时出现错误: {e}")
 
     def adjust_logging_and_run_model(self):
         """调整日志级别和运行模式"""
