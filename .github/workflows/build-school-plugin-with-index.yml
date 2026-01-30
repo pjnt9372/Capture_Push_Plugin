@@ -3,10 +3,6 @@ name: Manual Build and Release School Plugin with Index Update
 on:
   workflow_dispatch:
     inputs:
-      branch:
-        description: 'Branch to checkout'
-        required: true
-        default: 'main'
       school_code:
         description: 'School code to build (e.g., 10546)'
         required: true
@@ -39,12 +35,12 @@ jobs:
         
     - name: Prepare plugin directory
       run: |
-        # Copy the actual plugin from school/[SCHOOL_CODE] directory if it exists
-        if [ -d "school/${{ env.SCHOOL_CODE }}" ]; then
+        # Copy the actual plugin from core/school/[SCHOOL_CODE] directory if it exists
+        if [ -d "core/school/${{ env.SCHOOL_CODE }}" ]; then
           mkdir -p plugin_build/${{ env.SCHOOL_CODE }}
-          cp -r school/${{ env.SCHOOL_CODE }}/* plugin_build/${{ env.SCHOOL_CODE }}/ || echo "Error copying plugin files"
+          cp -r core/school/${{ env.SCHOOL_CODE }}/* plugin_build/${{ env.SCHOOL_CODE }}/ || echo "Error copying plugin files"
         else
-          echo "Error: Plugin directory school/${{ env.SCHOOL_CODE }} does not exist"
+          echo "Error: Plugin directory core/school/${{ env.SCHOOL_CODE }} does not exist"
           exit 1
         fi
         
