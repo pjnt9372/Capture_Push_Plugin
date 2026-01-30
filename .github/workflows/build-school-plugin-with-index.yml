@@ -125,7 +125,6 @@ jobs:
           school_${{ env.SCHOOL_CODE }}_plugin.zip
         draft: false
         prerelease: false
-        make_latest: true
 
     - name: Upload plugins_index.json as artifact
       uses: actions/upload-artifact@v4
