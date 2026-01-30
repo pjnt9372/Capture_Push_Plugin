@@ -1,3 +1,4 @@
+
 name: Manual Build and Release School Plugin with Index Update
 
 on:
@@ -131,4 +132,135 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: plugins_index.json
-        path: plugins_index.json
+=======
+name: Manual Build and Release School Plugin with Index Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to checkout'
+        required: true
+        default: 'master'
+      school_code:
+        description: 'School code to build (e.g., 10546)'
+        required: true
+        default: '10546'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.inputs.branch || 'master' }}
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Get branch and school code
+      id: vars
+      run: |
+        BRANCH=${{ github.event.inputs.branch || 'master' }}
+        SCHOOL_CODE=${{ github.event.inputs.school_code || '10546' }}
+        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+        echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+        echo "SCHOOL_CODE=$SCHOOL_CODE" >> $GITHUB_ENV
+        echo "TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+        echo "Using branch: $BRANCH, school code: $SCHOOL_CODE, timestamp: $TIMESTAMP"
+        
+    - name: Prepare plugin directory
+      run: |
+        # Copy the actual plugin from core/school/[SCHOOL_CODE] directory if it exists
+        if [ -d "core/school/${{ env.SCHOOL_CODE }}" ]; then
+          mkdir -p plugin_build/${{ env.SCHOOL_CODE }}
+          cp -r core/school/${{ env.SCHOOL_CODE }}/* plugin_build/${{ env.SCHOOL_CODE }}/ || echo "Error copying plugin files"
+        else
+          echo "Error: Plugin directory core/school/${{ env.SCHOOL_CODE }} does not exist"
+          exit 1
+        fi
+        
+    - name: Generate timestamp version
+      run: |
+        TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+        echo "TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+        
+    - name: Create plugin ZIP without version
+      run: |
+        cd plugin_build
+        zip -r ../school_${{ env.SCHOOL_CODE }}_plugin.zip ./${{ env.SCHOOL_CODE }}
+        cd ..
+        
+    - name: Calculate SHA256
+      id: sha256
+      run: |
+        SHA256=$(sha256sum school_${{ env.SCHOOL_CODE }}_plugin.zip | cut -d' ' -f1)
+        echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+        
+    - name: Create initial plugins_index.json
+      run: |
+        # 初始化插件索引文件，如果不存在则创建空文件
+        echo '{"plugins":[]}' > plugins_index.json
+        
+    - name: Update plugins_index.json
+      run: |
+        # Install jq tool (for processing JSON)
+        sudo apt-get update && sudo apt-get install -y jq
+
+        # Validate and fix potential JSON format issues
+        if ! jq empty plugins_index.json 2>/dev/null; then
+          echo '{"plugins":[]}' > plugins_index.json
+        fi
+
+        # Create new plugin info - use a single line command to avoid YAML issues
+        SCHOOL_CODE_ESCAPED=$(printf '%s\n' "${{ env.SCHOOL_CODE }}" | sed 's/"/\\"/g')
+        VERSION_ESCAPED=$(printf '%s\n' "${{ env.TIMESTAMP }}" | sed 's/"/\"/g')
+        URL_ESCAPED="https://github.com/${{ github.repository }}/releases/download/plugin%2Flatest/school_${{ env.SCHOOL_CODE }}_plugin.zip"
+        URL_ESCAPED=$(printf '%s\n' "$URL_ESCAPED" | sed 's/"/\\"/g')
+        
+        echo "{\"school_code\":\"$SCHOOL_CODE_ESCAPED\",\"school_name\":\"院校名称\",\"plugin_version\":\"$VERSION_ESCAPED\",\"sha256\":\"${{ steps.sha256.outputs.sha256 }}\",\"download_url\":\"$URL_ESCAPED\",\"contributor\":\"$GITHUB_ACTOR\",\"last_updated\":\"$(date +%Y-%m-%d)\"}" > new_plugin_info.json
+        
+        # Check if the plugin already exists in the index
+        if jq -e ".plugins[] | select(.school_code == \"${{ env.SCHOOL_CODE }}\")" plugins_index.json >/dev/null 2>&1; then
+          # Plugin exists, update entry
+          jq --argjson new_plugin "$(cat new_plugin_info.json)" '.plugins |= map(if .school_code == $new_plugin.school_code then $new_plugin else . end)' plugins_index.json > temp_index.json
+        else
+          # Plugin doesn't exist, add new entry
+          jq --argjson new_plugin "$(cat new_plugin_info.json)" '.plugins |= . + [$new_plugin]' plugins_index.json > temp_index.json
+        fi
+
+        mv temp_index.json plugins_index.json
+        cat plugins_index.json
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: plugin/latest
+        name: Latest Plugin Release
+        body: |
+          Manual Build - School Plugin for code ${{ env.SCHOOL_CODE }}
+          Timestamp: ${{ env.TIMESTAMP }}
+          Triggered by: ${{ github.actor }}
+          Build Type: Manual
+          
+          ```json
+          {
+            "plugin_version": "${{ env.TIMESTAMP }}",
+            "school_code": "${{ env.SCHOOL_CODE }}",
+            "sha256": "${{ steps.sha256.outputs.sha256 }}",
+            "contributor": "${{ github.actor }}",
+            "min_app_version": "1.0.0"
+          }
+          ```
+        files: |
+          school_${{ env.SCHOOL_CODE }}_plugin.zip
+        draft: false
+        prerelease: false
+        
+    - name: Upload plugins_index.json as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: plugins_index.json
