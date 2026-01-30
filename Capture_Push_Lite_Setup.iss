@@ -47,7 +47,9 @@ Name: autostart; Description: "开机自动启动托盘程序"; GroupDescription
 
 [Files]
 ; 仅打包核心程序文件，不包含 .venv
-Source: "core\*"; DestDir: "{app}\core"; Flags: ignoreversion recursesubdirs
+Source: "core\*"; DestDir: "{app}\core"; Flags: ignoreversion recursesubdirs excludeitchildless
+Source: "core\school\12345\*"; DestDir: "{app}\core\school\12345"; Flags: ignoreversion recursesubdirs
+Source: "core\plugins\school\12345\*"; DestDir: "{app}\core\plugins\school\12345"; Flags: ignoreversion recursesubdirs
 Source: "gui\*"; DestDir: "{app}\gui"; Flags: ignoreversion recursesubdirs
 Source: "resources\*"; DestDir: "{app}\resources"; Flags: ignoreversion recursesubdirs
 Source: "VERSION"; DestDir: "{app}"; Flags: ignoreversion
@@ -60,7 +62,7 @@ Name: "{localappdata}\Capture_Push"
 
 [Registry]
 Root: HKLM64; Subkey: "SOFTWARE\Capture_Push"; ValueType: string; ValueName: "InstallPath"; ValueData: "{app}"; Flags: uninsdeletevalue
-Root: HKLM64; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Capture_Push_Tray"; ValueData: """{app}\Capture_Push_tray.exe"""; Flags: uninsdeletevalue dontcreatekey; Tasks: autostart
+Root: HKCU64; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Capture_Push_Tray"; ValueData: """{app}\Capture_Push_tray.exe"""; Flags: uninsdeletevalue dontcreatekey; Tasks: autostart
 
 [Run]
 Filename: "{app}\Capture_Push_tray.exe"; Flags: nowait postinstall ; Description: "启动 Capture_Push 托盘程序"

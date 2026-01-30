@@ -116,6 +116,61 @@ webhook_url = https://oapi.dingtalk.com/robot/send?access_token=your_access_toke
    }
    ```
 
+---
+
+## 3. 插件化院校模块
+
+从版本 0.4.0 开始，Capture_Push 支持院校模块插件化，允许通过 GitHub API 轻松更新和添加新的院校模块。
+
+### 插件结构
+
+插件应遵循以下结构：
+
+```
+plugin_directory/
+├── __init__.py
+├── getCourseGrades.py
+├── getCourseSchedule.py
+└── version.txt (可选)
+```
+
+### 插件接口要求
+
+#### `__init__.py` 文件
+
+必须导出以下内容：
+
+```python
+from .getCourseGrades import fetch_grades, parse_grades
+from .getCourseSchedule import fetch_course_schedule, parse_schedule
+
+SCHOOL_NAME = "院校名称"
+SCHOOL_CODE = "院校代码"  # 如 "10546"
+PLUGIN_VERSION = "插件版本"  # 如 "1.0.0"，建议严格按照版本号规则填写
+```
+
+### 通过GUI管理插件
+
+1. 打开主配置窗口
+2. 切换到"插件管理"标签页
+3. 在这里可以：
+   - 查看已安装的插件
+   - 检查插件更新
+   - 安装新插件
+   - 卸载插件
+
+### 插件发布
+
+插件可通过 GitHub Releases 发布到固定的 `plugin/latest` 标签，发布说明中应包含插件的元数据：
+
+```json
+{
+  "school_code": "10546",
+  "plugin_version": "20260130_153022",  # 时间戳格式，由Action自动生成
+  "sha256": "插件文件的SHA256校验和"
+}
+```
+
 ### 数据规范：
 - **成绩数据**: 返回列表，每项为字典，必须包含 `课程名称`, `成绩`, `学分`, `课程属性`, `学期`。
 - **课表数据**: 返回列表，每项为字典，必须包含 `星期` (1-7), `开始小节`, `结束小节`, `课程名称`, `教室`, `教师`, `周次列表` (int列表)。

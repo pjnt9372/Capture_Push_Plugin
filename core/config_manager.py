@@ -65,3 +65,23 @@ def save_config(cfg):
     # 写入二进制文件
     with open(config_path, 'wb') as f:
         f.write(encrypted_data)
+
+
+def get_plaintext_config_from_encrypted():
+    """从加密的配置文件获取明文配置内容"""
+    config_path = str(get_config_path())
+    
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"配置文件不存在: {config_path}")
+    
+    # 读取二进制内容
+    with open(config_path, 'rb') as f:
+        raw_data = f.read()
+    
+    # 尝试解密
+    try:
+        content = dpapi.decrypt(raw_data)
+        return content
+    except Exception as e:
+        # 如果解密失败，抛出异常
+        raise Exception(f"解密配置文件失败: {str(e)}")

@@ -678,9 +678,9 @@ class Updater:
         # 保存安装包到程序目录（如果还没保存的话）
         saved_path = self.save_installer_locally(installer_path)
         
-        # 执行安装
-        logger.info("开始安装修复...")
-        return self.install_update(saved_path, silent=True)
+        logger.info(f"修复包准备就绪: {saved_path}")
+        # 返回安装包路径，由调用方决定何时执行安装
+        return saved_path
 
 
 def check_for_updates_cli():

@@ -191,6 +191,7 @@ jobs:
             - **Lite SHA256**: `${{ env.LITE_INSTALLER_SHA256 }}`
             
             You can verify the integrity of the downloaded files using these hashes.
+            Please do not use versions older than 0.4.0
           draft: false
           # 如果是 Beta 分支，或者版本号包含 _Beta，或者手动勾选了 prerelease，则标记为预发布
           prerelease: ${{ github.ref == 'refs/heads/Beta' || contains(env.APP_VERSION, '_Beta') || github.event.inputs.prerelease == 'true' }}

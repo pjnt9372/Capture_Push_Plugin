@@ -36,11 +36,13 @@ except ImportError:
 
 # 导入自定义组件和对话框
 try:
-    from widgets import CourseBlock
-    from dialogs import CourseEditDialog
+    from . import custom_widgets, dialogs
+    CourseBlock = custom_widgets.CourseBlock
+    CourseEditDialog = dialogs.CourseEditDialog
 except ImportError:
-    from gui.widgets import CourseBlock
-    from gui.dialogs import CourseEditDialog
+    # 作为独立脚本运行时
+    from custom_widgets import CourseBlock
+    from dialogs import CourseEditDialog
 
 CONFIG_FILE = str(get_config_path())
 APPDATA_DIR = get_log_file_path('gui').parent
@@ -60,9 +62,34 @@ class ScheduleViewerWindow(QWidget):
         
         # 设置窗口图标
         try:
-            icon_path = BASE_DIR / "resources" / "app_icon.ico"
-            if icon_path.exists():
+            import sys
+            
+            icon_path = None
+            
+            # 尝试多种可能的路径
+            possible_paths = [
+                BASE_DIR / "resources" / "app_icon.ico",  # 开发环境路径
+                Path(sys.prefix) / "resources" / "app_icon.ico",  # 安装环境路径
+                Path.cwd() / "resources" / "app_icon.ico",  # 当前工作目录
+                Path(sys.executable).parent / "resources" / "app_icon.ico"  # 可执行文件所在目录
+            ]
+            
+            for path in possible_paths:
+                if path.exists():
+                    icon_path = path
+                    break
+            
+            if icon_path:
                 self.setWindowIcon(QIcon(str(icon_path)))
+                
+                # 在Windows上额外确保任务栏图标正确显示
+                if sys.platform == "win32":
+                    try:
+                        # 使用ctypes设置应用程序组ID，这有助于Windows识别任务栏图标
+                        myappid = 'Capture_Push.GUI.1'
+                        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+                    except Exception as e:
+                        print(f"无法设置Windows AppUserModelID: {e}")
         except Exception as e:
             print(f"无法设置课表窗口图标: {e}")
         

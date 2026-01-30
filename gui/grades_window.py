@@ -50,9 +50,34 @@ class GradesViewerWindow(QWidget):
         
         # 设置窗口图标
         try:
-            icon_path = BASE_DIR / "resources" / "app_icon.ico"
-            if icon_path.exists():
+            import sys
+            
+            icon_path = None
+            
+            # 尝试多种可能的路径
+            possible_paths = [
+                BASE_DIR / "resources" / "app_icon.ico",  # 开发环境路径
+                Path(sys.prefix) / "resources" / "app_icon.ico",  # 安装环境路径
+                Path.cwd() / "resources" / "app_icon.ico",  # 当前工作目录
+                Path(sys.executable).parent / "resources" / "app_icon.ico"  # 可执行文件所在目录
+            ]
+            
+            for path in possible_paths:
+                if path.exists():
+                    icon_path = path
+                    break
+            
+            if icon_path:
                 self.setWindowIcon(QIcon(str(icon_path)))
+                
+                # 在Windows上额外确保任务栏图标正确显示
+                if sys.platform == "win32":
+                    try:
+                        # 使用ctypes设置应用程序组ID，这有助于Windows识别任务栏图标
+                        myappid = 'Capture_Push.GUI.1'
+                        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+                    except Exception as e:
+                        logger.error(f"无法设置Windows AppUserModelID: {e}")
         except Exception as e:
             logger.error(f"无法设置成绩窗口图标: {e}")
             print(f"无法设置成绩窗口图标: {e}")

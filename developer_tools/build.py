@@ -13,6 +13,7 @@ import urllib.request
 import zipfile
 import subprocess
 import hashlib
+
 from pathlib import Path
 from datetime import datetime
 
@@ -181,7 +182,28 @@ def main():
     
     # 3. 同步源码到构建空间 (保持与仓库相同的相对结构，以便 .iss 无需修改即可运行)
     log("正在同步组件到构建空间...")
-    copy_tree(project_root / "core", build_dir / "core")
+    
+    # 复制 core 目录，但只保留 school/12345 子目录
+    if (project_root / "core").exists():
+        core_dst = build_dir / "core"
+        copy_tree(project_root / "core", core_dst)
+        
+        # 清理 school 目录，只保留 12345 目录
+        school_dir = core_dst / "school"
+        if school_dir.exists():
+            for school_subdir in school_dir.iterdir():
+                if school_subdir.is_dir() and school_subdir.name != "12345":
+                    shutil.rmtree(school_subdir)
+                    log(f"已移除非12345的学校目录: {school_subdir.name}")
+        
+        # 清理 plugins/school 目录，只保留 12345 目录（如果存在）
+        plugins_school_dir = core_dst / "plugins" / "school"
+        if plugins_school_dir.exists():
+            for school_subdir in plugins_school_dir.iterdir():
+                if school_subdir.is_dir() and school_subdir.name != "12345":
+                    shutil.rmtree(school_subdir)
+                    log(f"已移除非12345的学校插件目录: {school_subdir.name}")
+    
     copy_tree(project_root / "gui", build_dir / "gui")
     copy_tree(project_root / "resources", build_dir / "resources")
     
