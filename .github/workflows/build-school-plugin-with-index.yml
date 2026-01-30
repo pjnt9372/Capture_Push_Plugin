@@ -59,7 +59,7 @@ jobs:
         
     - name: Download existing plugins_index.json
       run: |
-        curl -o plugins_index.json https://raw.githubusercontent.com/pjnt9372/Capture_Push_School_Plugins/main/plugins_index.json || echo '{"plugins":[]}' > plugins_index.json
+        curl -o plugins_index.json https://raw.githubusercontent.com/${{ github.repository }}/main/plugins_index.json || echo '{"plugins":[]}' > plugins_index.json
         
     - name: Update plugins_index.json
       run: |
@@ -120,9 +120,7 @@ jobs:
       run: |
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-        git clone https://github.com/pjnt9372/Capture_Push_School_Plugins.git repo
-        cd repo
-        cp ../plugins_index.json .
+        git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
         git add plugins_index.json
         git commit -m "Update plugins_index.json for ${{ env.SCHOOL_CODE }} timestamp_${{ env.TIMESTAMP }} [skip ci]" || echo "No changes to commit"
-        git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/pjnt9372/Capture_Push_School_Plugins.git main || echo "Push failed"
+        git push origin main || echo "Push failed"
