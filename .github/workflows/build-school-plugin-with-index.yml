@@ -103,9 +103,9 @@ jobs:
     - name: Create or Update Release
       uses: softprops/action-gh-release@v1
       with:
-        repository: pjnt9372/Capture_Push_School_Plugins
         tag_name: plugin/latest
         name: Latest Plugin Release
+        target_commitish: master
         body: |
           Manual Build - School Plugin for code ${{ env.SCHOOL_CODE }}
           Timestamp: ${{ env.TIMESTAMP }}
