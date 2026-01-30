@@ -18,6 +18,7 @@ from gui.tabs.software_settings_tab import SoftwareSettingsTab
 from gui.tabs.school_time_tab import SchoolTimeTab
 from gui.tabs.push_tab import PushTab
 from gui.tabs.about_tab import AboutTab
+from gui.tabs.plugin_management_tab import PluginManagementTab
 
 from core.config_manager import load_config
 
@@ -123,6 +124,7 @@ class ConfigWindow(QMainWindow):
         self.school_time_tab = SchoolTimeTab(self, self.config_manager)
         self.push_tab = PushTab(self, self.config_manager)
         self.about_tab = AboutTab(self, self.config_manager)
+        self.plugin_management_tab = PluginManagementTab(self, self.config_manager)
 
 
         # Add tabs to the tab widget
@@ -131,6 +133,7 @@ class ConfigWindow(QMainWindow):
         self.tab_widget.addTab(self.software_settings_tab, "软件设置")
         self.tab_widget.addTab(self.school_time_tab, "学校时间")
         self.tab_widget.addTab(self.push_tab, "推送设置")
+        self.tab_widget.addTab(self.plugin_management_tab, "插件管理")
         self.tab_widget.addTab(self.about_tab, "关于")
 
         # Status Bar
@@ -145,6 +148,7 @@ class ConfigWindow(QMainWindow):
             "software_settings": self.software_settings_tab,
             "school_time": self.school_time_tab,
             "push": self.push_tab,
+            "plugin_management": self.plugin_management_tab,
             "about": self.about_tab,
         }
         

@@ -1,0 +1,285 @@
+name: Build and Release School Plugin with Index Update
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      school_code:
+        description: 'School code to build (e.g., 10546)'
+        required: true
+        default: '10546'
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Get school code and version
+      id: vars
+      run: |
+        SCHOOL_CODE=${{ github.event.inputs.school_code || '10546' }}
+        VERSION=${{ github.event.inputs.version || '1.0.0' }}
+        echo "SCHOOL_CODE=$SCHOOL_CODE" >> $GITHUB_ENV
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        
+    - name: Prepare plugin directory
+      run: |
+        mkdir -p plugin_build/${{ env.SCHOOL_CODE }}
+        # Copy actual plugin files if they exist, otherwise create sample structure
+        if [ -d "school/${{ env.SCHOOL_CODE }}" ]; then
+          cp -r school/${{ env.SCHOOL_CODE }}/* plugin_build/${{ env.SCHOOL_CODE }}/ || echo "Using sample plugin structure"
+        else
+          echo "Creating sample plugin structure for ${{ env.SCHOOL_CODE }}"
+          mkdir -p plugin_build/${{ env.SCHOOL_CODE }}
+          # Create sample plugin files if needed
+          cat << 'EOF' > plugin_build/${{ env.SCHOOL_CODE }}/getCourseGrades.py
+# -*- coding: utf-8 -*-
+"""
+成绩获取模块 - 示例插件
+用于从教务系统获取学生成绩信息
+"""
+
+def fetch_grades(username, password, force_update=False):
+    """
+    获取学生成绩
+    
+    Args:
+        username: 用户名
+        password: 密码
+        force_update: 是否强制更新
+    
+    Returns:
+        成绩数据字典
+    """
+    # 这里是示例实现，实际插件应该实现真实的获取逻辑
+    print(f"模拟获取 {username} 的成绩信息...")
+    
+    # 模拟成绩数据
+    grades_data = {
+        "student_info": {
+            "name": "张三",
+            "student_id": username,
+            "college": "示例学院",
+            "major": "示例专业",
+            "grade": "2021级"
+        },
+        "grades": [
+            {
+                "course_name": "高等数学",
+                "credit": 4.0,
+                "score": "85",
+                "grade_point": 3.5,
+                "semester": "2021-2022-1",
+                "exam_type": "考试"
+            }
+        ],
+        "gpa": 3.5
+    }
+    
+    return grades_data
+
+
+def parse_grades(raw_data):
+    """
+    解析原始成绩数据
+    
+    Args:
+        raw_data: 原始数据
+    
+    Returns:
+        解析后的成绩数据
+    """
+    # 在真实插件中，这里会解析从教务系统获取的原始HTML/JSON数据
+    # 这里只是返回模拟的数据
+    return raw_data
+EOF
+
+          cat << 'EOF' > plugin_build/${{ env.SCHOOL_CODE }}/getCourseSchedule.py
+# -*- coding: utf-8 -*-
+"""
+课表获取模块 - 示例插件
+用于从教务系统获取学生课表信息
+"""
+
+def fetch_course_schedule(username, password, force_update=False):
+    """
+    获取学生课表
+    
+    Args:
+        username: 用户名
+        password: 密码
+        force_update: 是否强制更新
+    
+    Returns:
+        课表数据字典
+    """
+    # 这里是示例实现，实际插件应该实现真实的获取逻辑
+    print(f"模拟获取 {username} 的课表信息...")
+    
+    # 模拟课表数据
+    schedule_data = {
+        "student_info": {
+            "name": "张三",
+            "student_id": username,
+            "college": "示例学院",
+            "major": "示例专业",
+            "grade": "2021级"
+        },
+        "schedule": [
+            {
+                "course_name": "高等数学",
+                "teacher": "李教授",
+                "classroom": "教学楼A101",
+                "week_day": 1,  # 星期一
+                "period_start": 1,
+                "period_end": 2,
+                "weeks": "1-16周",
+                "semester": "2021-2022-1"
+            }
+        ]
+    }
+    
+    return schedule_data
+
+
+def parse_schedule(raw_data):
+    """
+    解析原始课表数据
+    
+    Args:
+        raw_data: 原始数据
+    
+    Returns:
+        解析后的课表数据
+    """
+    # 在真实插件中，这里会解析从教务系统获取的原始HTML/JSON数据
+    # 这里只是返回模拟的数据
+    return raw_data
+EOF
+
+          cat << EOF > plugin_build/${{ env.SCHOOL_CODE }}/__init__.py
+# -*- coding: utf-8 -*-
+"""
+示例插件模块
+"""
+
+from .getCourseGrades import fetch_grades, parse_grades
+from .getCourseSchedule import fetch_course_schedule, parse_schedule
+
+SCHOOL_NAME = "示例院校"
+SCHOOL_CODE = "${{ env.SCHOOL_CODE }}"
+PLUGIN_VERSION = "${{ env.VERSION }}"
+
+__all__ = ['fetch_grades', 'parse_grades', 'fetch_course_schedule', 'parse_schedule', 
+           'SCHOOL_NAME', 'SCHOOL_CODE', 'PLUGIN_VERSION']
+EOF
+        fi
+        
+    - name: Generate timestamp version
+      run: |
+        TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+        echo "TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+        
+    - name: Create plugin ZIP without version
+      run: |
+        cd plugin_build
+        zip -r ../school_${{ env.SCHOOL_CODE }}_plugin.zip ./${{ env.SCHOOL_CODE }}
+        cd ..
+        
+    - name: Calculate SHA256
+      id: sha256
+      run: |
+        SHA256=$(sha256sum school_${{ env.SCHOOL_CODE }}_plugin.zip | cut -d' ' -f1)
+        echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+        
+    - name: Download existing plugins_index.json
+      run: |
+        curl -o plugins_index.json https://raw.githubusercontent.com/pjnt9372/Capture_Push_School_Plugins/main/plugins_index.json || echo '{"plugins":[]}' > plugins_index.json
+        
+    - name: Update plugins_index.json
+      run: |
+        # 安装jq工具（用于处理JSON）
+        sudo apt-get update && sudo apt-get install -y jq
+
+        # 验证并修复可能的JSON格式问题
+        if ! jq empty plugins_index.json 2>/dev/null; then
+          echo '{"plugins":[]}' > plugins_index.json
+        fi
+
+        # 创建新的插件信息
+        NEW_PLUGIN_INFO=$(jq -n --arg code "${{ env.SCHOOL_CODE }}" \
+--arg name "示例院校" \
+--arg version "${{ env.VERSION }}" \
+--arg sha256 "${{ steps.sha256.outputs.sha256 }}" \
+--arg url "https://github.com/pjnt9372/Capture_Push_School_Plugins/releases/download/v${{ env.VERSION }}/school_${{ env.SCHOOL_CODE }}_v${{ env.VERSION }}.zip" \
+--arg contrib "$GITHUB_ACTOR" \
+--arg updated "$(date +%Y-%m-%d)" \
+'{school_code: $code, school_name: $name, plugin_version: $version, sha256: $sha256, download_url: $url, contributor: $contrib, last_updated: $updated}')
+
+        # 检查插件是否已存在于索引中
+        INDEX_FILE_EXISTS=$(cat plugins_index.json | jq -e '.plugins | length' 2>/dev/null)
+        if [ $? -eq 0 ]; then
+          # 检查插件是否已存在
+          EXISTS=$(cat plugins_index.json | jq -e --arg code "${{ env.SCHOOL_CODE }}" '.plugins[] | select(.school_code == $code) | .school_code' 2>/dev/null)
+          
+          if [ -n "$EXISTS" ]; then
+            # 插件已存在，更新现有条目
+            cat plugins_index.json | jq --arg code "${{ env.SCHOOL_CODE }}" --argjson new_plugin "$NEW_PLUGIN_INFO" '(.plugins[] | select(.school_code == $code)) = $new_plugin' > temp_index.json
+          else
+            # 插件不存在，添加新条目
+            cat plugins_index.json | jq --argjson new_plugin "$NEW_PLUGIN_INFO" '.plugins |= . + [$new_plugin]' > temp_index.json
+          fi
+        else
+          # 索引文件格式不正确，重新创建
+          echo '{"plugins":[$NEW_PLUGIN_INFO]}' > temp_index.json
+        fi
+
+        mv temp_index.json plugins_index.json
+        cat plugins_index.json
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: plugin/latest
+        name: Latest Plugin Release
+        body: |
+          School Plugin for code ${{ env.SCHOOL_CODE }}
+          Timestamp: ${{ env.TIMESTAMP }}
+          Contributor: ${{ github.actor }}
+          
+          ```json
+          {
+            "plugin_version": "${{ env.TIMESTAMP }}",
+            "school_code": "${{ env.SCHOOL_CODE }}",
+            "sha256": "${{ steps.sha256.outputs.sha256 }}",
+            "contributor": "${{ github.actor }}",
+            "min_app_version": "1.0.0"
+          }
+          ```
+        files: |
+          school_${{ env.SCHOOL_CODE }}_plugin.zip
+        draft: false
+        prerelease: false
+        
+    - name: Commit and push plugins_index.json
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        git clone https://github.com/pjnt9372/Capture_Push_School_Plugins.git repo
+        cd repo
+        cp ../plugins_index.json .
+        git add plugins_index.json
+        git commit -m "Update plugins_index.json for ${{ env.SCHOOL_CODE }} v${{ env.VERSION }} [skip ci]" || echo "No changes to commit"
+        git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/pjnt9372/Capture_Push_School_Plugins.git main || echo "Push failed"

@@ -73,7 +73,7 @@ class AboutTab(BaseTab):
         self.repair_btn = QPushButton("修复安装")
         self.developer_options_btn = QPushButton("开发者选项")
 
-        author_label = QLabel("开发者: pjnt9372")
+        author_label = QLabel(" ")
         author_label.setStyleSheet("font-size: 12px; color: #999999;")
         author_label.setAlignment(Qt.AlignCenter)
 

@@ -3,10 +3,7 @@ from PySide6.QtWidgets import QVBoxLayout, QFormLayout, QComboBox, QLineEdit
 from .base_tab import BaseTab
 from ..widgets.collapsible_box import CollapsibleBox
 
-try:
-    from core.school import get_available_schools
-except ImportError:
-    from school import get_available_schools
+from core.school import get_available_schools
 
 class BasicTab(BaseTab):
     def __init__(self, parent=None, config_manager=None):
