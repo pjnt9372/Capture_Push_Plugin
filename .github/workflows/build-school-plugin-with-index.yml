@@ -1,8 +1,6 @@
 name: Build and Release School Plugin with Index Update
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
     inputs:
       school_code:
@@ -223,7 +221,7 @@ EOF
 --arg name "示例院校" \
 --arg version "${{ env.VERSION }}" \
 --arg sha256 "${{ steps.sha256.outputs.sha256 }}" \
---arg url "https://github.com/pjnt9372/Capture_Push_School_Plugins/releases/download/v${{ env.VERSION }}/school_${{ env.SCHOOL_CODE }}_v${{ env.VERSION }}.zip" \
+--arg url "https://github.com/pjnt9372/Capture_Push_School_Plugins/releases/download/plugin%2Flatest/school_${{ env.SCHOOL_CODE }}_plugin.zip" \
 --arg contrib "$GITHUB_ACTOR" \
 --arg updated "$(date +%Y-%m-%d)" \
 '{school_code: $code, school_name: $name, plugin_version: $version, sha256: $sha256, download_url: $url, contributor: $contrib, last_updated: $updated}')
