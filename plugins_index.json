@@ -1,0 +1,13 @@
+{
+  "plugins": [
+    {
+      "school_code": "10546",
+      "school_name": "衡阳师范学院",
+      "plugin_version": "20260201_115840",
+      "sha256": "506f0e826991dbfc54b1b9832e116e76b8ad61e743e8c7400a4f20230e2eeb7e",
+      "download_url": "https://github.com/pjnt9372/Capture_Push_Plugin/releases/download/plugin%2Flatest/school_10546_plugin.zip",
+      "contributor": "pjnt9372",
+      "last_updated": "2026-02-01"
+    }
+  ]
+}
